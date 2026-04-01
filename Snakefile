@@ -6,7 +6,7 @@ OUT  = f"{config['output_dir']}/{RUN}"
 
 rule all:
     input:
-        f"{DATA}/intermediate/doxy_profiles/processing_manifest.csv"
+        f"{DATA}/intermediate/nitrate_profiles/nitrate_manifest.csv"
 
 rule download_sprof:
     output:
@@ -17,6 +17,7 @@ rule download_sprof:
 
 rule process_sprof:
     input:
+        sprof_dir = f"{DATA}/raw",
         manifest = f"{DATA}/raw/download_manifest.csv",
         wmo_list = f"{DATA}/raw/wmo_list.txt"
     output:
@@ -24,3 +25,13 @@ rule process_sprof:
         manifest = f"{DATA}/intermediate/doxy_profiles/processing_manifest.csv"
     script:
         "scripts/process_sprof.R"
+
+rule predict_nitrate:
+    input:
+        in_dir   = f"{DATA}/intermediate/doxy_profiles",
+        manifest = f"{DATA}/intermediate/doxy_profiles/processing_manifest.csv"
+    output:
+        out_dir  = directory(f"{DATA}/intermediate/nitrate_profiles"),
+        manifest = f"{DATA}/intermediate/nitrate_profiles/nitrate_manifest.csv"
+    script:
+        "scripts/predict_nitrate.R"
