@@ -6,8 +6,8 @@ lon_max: -10
 lat_min: 58
 lat_max: 65
 
-date_start: "2023-01-01"
-date_end: "2023-12-31"
+date_start: "2023-06-01"
+date_end: "2023-07-31"
 
 data_dir: "data"
 ncp_method: "o2_budget"

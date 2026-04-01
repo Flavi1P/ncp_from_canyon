@@ -1,8 +1,8 @@
 configfile: "config.yaml"
 
-RUN    = config["run_name"]
-DATA   = f"{config['data_dir']}/{RUN}"
-OUT    = f"{config['output_dir']}/{RUN}"
+RUN  = config["run_name"]
+DATA = f"{config['data_dir']}/{RUN}"
+OUT  = f"{config['output_dir']}/{RUN}"
 
 rule all:
     input:
@@ -17,9 +17,10 @@ rule download_sprof:
 
 rule process_sprof:
     input:
-        sprof_dir = f"{DATA}/raw"
+        manifest = f"{DATA}/raw/download_manifest.csv",
+        wmo_list = f"{DATA}/raw/wmo_list.txt"
     output:
-        out_dir   = directory(f"{DATA}/intermediate/doxy_profiles"),
-        manifest  = f"{DATA}/intermediate/doxy_profiles/processing_manifest.csv"
+        out_dir  = directory(f"{DATA}/intermediate/doxy_profiles"),
+        manifest = f"{DATA}/intermediate/doxy_profiles/processing_manifest.csv"
     script:
         "scripts/process_sprof.R"

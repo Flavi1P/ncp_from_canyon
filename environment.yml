@@ -183,12 +183,5 @@ dependencies:
   - zstd=1.5.7=h534d264_6
   - pip:
       - scipy==1.17.1
-  # R
-  - r-base=4.4
-  - r-ncdf4
-  - r-dplyr
-  - r-tidyr
-  - r-lubridate
-  - r-zoo
-  - r-readr
+
 prefix: C:\Users\petit\miniconda3\envs\argo-ncp

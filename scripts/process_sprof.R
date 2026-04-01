@@ -97,7 +97,11 @@ for (file in files) {
     )) %>%
     ungroup() |>
     group_by(lon, lat, date, depth) |>
-    summarise(across(everything(), mean, na.rm = TRUE), .groups = "drop") |>
+    summarise(
+    temp = mean(temp, na.rm = TRUE),
+    sal = mean(sal, na.rm = TRUE),
+    oxygen = mean(oxygen, na.rm = TRUE),
+    .groups = "drop") |>
     arrange(date) |>
     mutate(prof_number = dense_rank(date))
 
