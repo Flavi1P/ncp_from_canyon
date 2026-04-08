@@ -6,7 +6,8 @@ OUT  = f"{config['output_dir']}/{RUN}"
 
 rule all:
     input:
-        f"{DATA}/intermediate/nitrate_profiles/nitrate_manifest.csv"
+        f"{DATA}/intermediate/merged/merged_ncp.csv",
+        f"{OUT}/float_map.png"
 
 rule download_sprof:
     output:
@@ -35,3 +36,13 @@ rule predict_nitrate:
         manifest = f"{DATA}/intermediate/nitrate_profiles/nitrate_manifest.csv"
     script:
         "scripts/predict_nitrate.R"
+    
+rule merge_floats:
+    input:
+        in_dir   = f"{DATA}/intermediate/nitrate_profiles",
+        manifest = f"{DATA}/intermediate/nitrate_profiles/nitrate_manifest.csv"
+    output:
+        merged_csv = f"{DATA}/intermediate/merged/merged_ncp.csv",
+        map_png    = f"{OUT}/float_map.png"
+    script:
+        "scripts/merge_nitrate_files.R"
