@@ -2,6 +2,7 @@ library(tidyverse)
 library(here)
 library(seacarb)
 library(mgcv)
+library(data.table)
 
 # ── Snakemake / CLI input handling ────────────────────────────────────────────
 if (exists("snakemake")) {
