@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"/c/Program Files/R/R-4.5.2/bin/Rscript.exe\" --vanilla scripts/_debug3.R)",
+      "Bash(snakemake --dry-run)",
+      "Bash(\"/c/Program Files/R/R-4.5.2/bin/Rscript.exe\" --vanilla scripts/_debug_uncertainty.R)",
+      "Bash(\"/c/Program Files/R/R-4.5.2/bin/Rscript.exe\" --vanilla scripts/compute_ncp_uncertainty.R)",
+      "Bash(rm \"c:/Users/petit/Documents/ncp_from_canyon/scripts/_test_mc.R\")",
+      "Bash(timeout 120 '/c/Program Files/R/R-4.5.2/bin/Rscript.exe' --vanilla -e ':*)",
+      "Bash(\"/c/Program Files/R/R-4.5.2/bin/Rscript.exe\" --vanilla scripts/_test_mc.R)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\petit\\Documents\\ncp_from_canyon\\scripts"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"/c/Program Files/R/R-4.5.2/bin/Rscript.exe\" --vanilla scripts/compute_ncp.R)",
+      "Bash(\"/c/Program Files/R/R-4.5.2/bin/Rscript.exe\" --vanilla scripts/compute_ncp.R \"data/NorthAtlantic_test/intermediate/merged/merged_ncp.csv\" \"output/NorthAtlantic_test/ncp\")",
+      "Bash(\"/c/Program Files/R/R-4.5.2/bin/Rscript.exe\" --vanilla scripts/_debug_30days.R)",
+      "Bash(\"/c/Program Files/R/R-4.5.2/bin/Rscript.exe\" --vanilla scripts/_debug2.R)",
+      "Bash('/c/Program Files/R/R-4.5.2/bin/Rscript.exe' --vanilla -e ':*)"
+    ]
+  }
+}

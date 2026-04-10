@@ -1,14 +1,26 @@
-# config.yaml
-run_name: "NorthAtlantic_test"
-
-lon_min: -40
-lon_max: -10
-lat_min: 58
-lat_max: 65
-
-date_start: "2023-06-01"
-date_end: "2023-07-31"
-
-data_dir: "data"
-ncp_method: "o2_budget"
+run_name:   "NorthAtlantic_20s"
+data_dir:   "data"
+raw_dir:    "data/raw"
 output_dir: "output"
+
+# Spatial extent
+lon_min: -45
+lon_max: -10
+lat_min: 54
+lat_max: 63
+
+# Temporal extent
+date_start: "2020-01-01"
+date_end:   "2026-01-01"
+
+# NCP parameters
+ncp_time_steps: ["10 days", "15 days", "20 days"]
+mld_spar:       0.3
+zeu_default:    40
+
+# Uncertainty estimation
+uncertainty: true
+n_mc:        200
+canyon_rmse: 1.2   # mmol/m³ — added to each profile as correlated vertical noise
+
+ncp_method: "o2_budget"

@@ -7,7 +7,7 @@ library(readr)
 
 # ── Snakemake / CLI input handling ────────────────────────────────────────────
 if (exists("snakemake")) {
-  sprof_dir <- snakemake@input[["sprof_dir"]]
+  sprof_dir <- snakemake@params[["sprof_dir"]]
   out_dir   <- snakemake@output[["out_dir"]]
 } else {
   # CLI fallback for testing

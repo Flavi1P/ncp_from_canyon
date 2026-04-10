@@ -3,11 +3,20 @@ configfile: "config.yaml"
 RUN  = config["run_name"]
 DATA = f"{config['data_dir']}/{RUN}"
 OUT  = f"{config['output_dir']}/{RUN}"
+RAW  = config.get("raw_dir", "data/raw")
+
+_all_outputs = [
+    f"{OUT}/ncp/ncp_results.csv",
+    f"{OUT}/ncp/ncp_sensitivity.png",
+]
+if config.get("uncertainty", False):
+    _all_outputs += [
+        f"{OUT}/ncp/ncp_uncertainty.csv",
+        f"{OUT}/ncp/ncp_uncertainty.png",
+    ]
 
 rule all:
-    input:
-        f"{DATA}/intermediate/merged/merged_ncp.csv",
-        f"{OUT}/float_map.png"
+    input: _all_outputs
 
 rule download_sprof:
     output:
@@ -18,9 +27,10 @@ rule download_sprof:
 
 rule process_sprof:
     input:
-        sprof_dir = f"{DATA}/raw",
         manifest = f"{DATA}/raw/download_manifest.csv",
         wmo_list = f"{DATA}/raw/wmo_list.txt"
+    params:
+        sprof_dir = RAW
     output:
         out_dir  = directory(f"{DATA}/intermediate/doxy_profiles"),
         manifest = f"{DATA}/intermediate/doxy_profiles/processing_manifest.csv"
@@ -46,3 +56,24 @@ rule merge_floats:
         map_png    = f"{OUT}/float_map.png"
     script:
         "scripts/merge_nitrate_files.R"
+
+rule compute_ncp:
+    input:
+        merged_csv = f"{DATA}/intermediate/merged/merged_ncp.csv"
+    output:
+        out_dir        = directory(f"{OUT}/ncp"),
+        ncp_results    = f"{OUT}/ncp/ncp_results.csv",
+        sensitivity_png= f"{OUT}/ncp/ncp_sensitivity.png"
+    script:
+        "scripts/compute_ncp.R"
+
+if config.get("uncertainty", False):
+    rule compute_ncp_uncertainty:
+        input:
+            merged_csv = f"{DATA}/intermediate/merged/merged_ncp.csv",
+            ncp_done   = f"{OUT}/ncp/ncp_results.csv"
+        output:
+            results_csv = f"{OUT}/ncp/ncp_uncertainty.csv",
+            plot_png    = f"{OUT}/ncp/ncp_uncertainty.png"
+        script:
+            "scripts/compute_ncp_uncertainty.R"
