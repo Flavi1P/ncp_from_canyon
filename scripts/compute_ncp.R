@@ -1,39 +1,44 @@
 library(tidyverse)
 library(zoo)
-library(here)
+library(sf)
 
 # ── Snakemake / CLI input handling ────────────────────────────────────────────
 if (exists("snakemake")) {
-  merged_csv  <- snakemake@input[["merged_csv"]]
-  out_dir     <- snakemake@output[["out_dir"]]
-  time_steps  <- snakemake@config[["ncp_time_steps"]]
-  lon_min     <- snakemake@config[["lon_min"]]
-  lon_max     <- snakemake@config[["lon_max"]]
-  lat_min     <- snakemake@config[["lat_min"]]
-  lat_max     <- snakemake@config[["lat_max"]]
-  date_start  <- snakemake@config[["date_start"]]
-  date_end    <- snakemake@config[["date_end"]]
-  mld_spar       <- snakemake@config[["mld_spar"]]
-  zeu_default    <- snakemake@config[["zeu_default"]]
-  use_entrainment <- isTRUE(snakemake@config[["use_entrainment"]])
+  merged_csv      <- snakemake@input[["merged_csv"]]
+  out_dir         <- snakemake@output[["out_dir"]]
+  time_steps      <- snakemake@config[["ncp_time_steps"]]
+  basin_name      <- snakemake@params[["basin_name"]]
+  basin_polygon   <- snakemake@params[["basin_polygon"]]
+  date_start      <- snakemake@config[["date_start"]]
+  date_end        <- snakemake@config[["date_end"]]
+  mld_spar        <- snakemake@config[["mld_spar"]]
+  zeu_default     <- snakemake@config[["zeu_default"]]
 } else {
-  args        <- commandArgs(trailingOnly = TRUE)
-  merged_csv  <- ifelse(length(args) > 0, args[1],
-                        "data/NorthAtlantic_2024/intermediate/merged/merged_ncp.csv")
-  out_dir     <- ifelse(length(args) > 1, args[2],
-                        "data/NorthAtlantic_2024/ncp")
-  time_steps  <- c("10 days", "15 days", "30 days")
-  lon_min     <- -40;  lon_max    <- -10
-  lat_min     <-  58;  lat_max    <-  65
-  date_start  <- "2023-01-01"
-  date_end    <- "2024-01-01"
+  args          <- commandArgs(trailingOnly = TRUE)
+  merged_csv    <- ifelse(length(args) > 0, args[1],
+                          "data/NorthAtlantic_20s/intermediate/merged/merged_ncp.csv")
+  out_dir       <- ifelse(length(args) > 1, args[2],
+                          "output/NorthAtlantic_20s/ncp/IcelandBasin")
+  time_steps    <- c("10 days", "15 days", "20 days")
+  basin_name    <- "IcelandBasin"
+  basin_polygon <- list(c(-42,54), c(-15,54), c(-15,63), c(-22,63), c(-22,57), c(-42,57))
+  date_start      <- "2020-01-01"
+  date_end        <- "2026-01-01"
   mld_spar        <- 0.3
   zeu_default     <- 40
-  use_entrainment <- TRUE
 }
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+# ── Build sf polygon from vertex list ─────────────────────────────────────────
+make_basin_polygon <- function(poly_verts) {
+  m <- do.call(rbind, lapply(poly_verts, as.numeric))
+  if (!all(m[1, ] == m[nrow(m), ])) m <- rbind(m, m[1, ])  # force close
+  st_polygon(list(m)) |> st_sfc(crs = 4326)
+}
+
+basin_poly <- make_basin_polygon(basin_polygon)
 
 message("Reading merged data from ", merged_csv)
 dat <- read_csv(merged_csv, show_col_types = FALSE)
@@ -50,23 +55,27 @@ integrate_nitrate <- function(nitrate, depth, from, to) {
 compute_ncp <- function(
     dat,
     time_step,
-    lon_min, lon_max, lat_min, lat_max,
+    basin_poly,
     date_start, date_end,
-    zeu_default     = 40,
-    mld_spar        = 0.3,
-    use_entrainment = TRUE,
-    label           = NULL
+    zeu_default = 40,
+    mld_spar    = 0.3,
+    label       = NULL
 ) {
 
   if (is.null(label)) label <- time_step
 
-  # filter
-  dat <- dat |>
+  # fast bbox pre-filter before expensive st_within
+  bbox     <- st_bbox(basin_poly)
+  dat <- dat |> filter(lon >= bbox["xmin"], lon <= bbox["xmax"],
+                       lat >= bbox["ymin"], lat <= bbox["ymax"])
+
+  # exact polygon filter
+  dat_sf   <- st_as_sf(dat, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
+  in_basin <- lengths(st_within(dat_sf, basin_poly)) > 0
+  dat <- dat[in_basin, ] |>
     filter(
-      lon  >= lon_min & lon  <= lon_max,
-      lat  >= lat_min & lat  <= lat_max,
-      date >  as.Date(date_start),
-      date <  as.Date(date_end)
+      date > as.Date(date_start),
+      date < as.Date(date_end)
     ) |>
     mutate(zeu = zeu_default)
 
@@ -159,16 +168,10 @@ compute_ncp <- function(
     group_by(date_grid, mld, zeu) |>
     filter(!is.na(next_integration_depth)) |>
     summarise(
-      int_N_mmol_m2         = integrate_nitrate(nitrate, depth, 0,
-                                                 unique(NCP_integration_depth)),
-      next_int_N_mmol_m2    = integrate_nitrate(nitrate, depth, 0,
-                                                 unique(next_integration_depth)),
-      mld_concentration     = integrate_nitrate(nitrate, depth,
-                                                 unique(NCP_integration_depth) - 20,
-                                                 unique(NCP_integration_depth) - 10) / 10,
-      sub_mld_concentration = integrate_nitrate(nitrate, depth,
-                                                 unique(NCP_integration_depth) + 20,
-                                                 unique(NCP_integration_depth) + 30) / 10,
+      int_N_mmol_m2      = integrate_nitrate(nitrate, depth, 0,
+                                              unique(NCP_integration_depth)),
+      next_int_N_mmol_m2 = integrate_nitrate(nitrate, depth, 0,
+                                              unique(next_integration_depth)),
       .groups = "drop"
     )
 
@@ -183,14 +186,10 @@ compute_ncp <- function(
     arrange(date_grid) |>
     mutate(
       dt                  = as.numeric(date_grid - lag(date_grid)),
-      diff_mld            = mld - lag(mld),
-      we                  = pmax(0, diff_mld),
-      delta               = sub_mld_concentration - mld_concentration,
-      diff                = if (use_entrainment) delta * we else 0,
       nitrate_consumption = lag(next_int_N_smooth) - int_N_smooth,
       c_consumption       = nitrate_consumption * 6.625 / dt,
-      NCP                 = c_consumption + diff,
-      NCP = case_when(NCP < -60 ~ NCP / 2, TRUE ~ NCP)
+      NCP                 = c_consumption,
+      NCP                 = case_when(NCP < -60 ~ NCP / 2, TRUE ~ NCP)
     ) |>
     filter(!is.na(NCP)) |>
     mutate(time_step_label = label)
@@ -199,20 +198,19 @@ compute_ncp <- function(
 }
 
 # ── Run all time steps ────────────────────────────────────────────────────────
-message("Running NCP for time steps: ", paste(time_steps, collapse = ", "))
+message("Running NCP for basin: ", basin_name)
+message("Time steps: ", paste(time_steps, collapse = ", "))
 
 all_results <- map(time_steps, function(ts) {
   tryCatch(
     compute_ncp(
       dat             = dat,
       time_step       = ts,
-      lon_min         = lon_min, lon_max = lon_max,
-      lat_min         = lat_min, lat_max = lat_max,
+      basin_poly      = basin_poly,
       date_start      = date_start, date_end = date_end,
-      mld_spar        = mld_spar,
-      zeu_default     = zeu_default,
-      use_entrainment = use_entrainment,
-      label           = ts
+      mld_spar    = mld_spar,
+      zeu_default = zeu_default,
+      label       = ts
     ),
     error = function(e) { message("Failed for ", ts, ": ", e$message); NULL }
   )
@@ -223,17 +221,17 @@ all_results <- map(time_steps, function(ts) {
 # ── Save results ──────────────────────────────────────────────────────────────
 results_csv <- file.path(out_dir, "ncp_results.csv")
 write_csv(all_results, results_csv)
-message("NCP results saved → ", results_csv)
+message("NCP results saved -> ", results_csv)
 
 # ── Plots ─────────────────────────────────────────────────────────────────────
 p_sensitivity <- ggplot(all_results) +
   geom_line(aes(x = date_grid, y = NCP, color = time_step_label)) +
   scale_color_brewer(palette = "Set1", name = "Time step") +
-  labs(y = "mmol C m⁻² d⁻¹", x = "Date",
-       title = "NCP sensitivity to time step") +
+  labs(y = "mmol C m-2 d-1", x = "Date",
+       title = paste0("NCP sensitivity to time step -- ", basin_name)) +
   theme_bw() +
   scale_x_date(date_labels = "%b %Y", breaks = "6 months")
 
 ggsave(file.path(out_dir, "ncp_sensitivity.png"), p_sensitivity,
        width = 10, height = 5, dpi = 150)
-message("Sensitivity plot saved → ", file.path(out_dir, "ncp_sensitivity.png"))
+message("Sensitivity plot saved -> ", file.path(out_dir, "ncp_sensitivity.png"))

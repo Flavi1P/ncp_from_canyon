@@ -45,18 +45,11 @@ global ocean data (Bittig et al. 2018).
 
 For each time window of width dt (e.g. 10 days), NCP is computed as:
 
-    NCP = dN/dt + we * delta_N
+    NCP = dN/dt
 
-where:
-
-- dN/dt is the change in depth-integrated nitrate between consecutive time
-  windows, converted to carbon units via the Redfield ratio and normalised
-  by dt.
-- we is the entrainment velocity, equal to the positive part of the change
-  in mixed-layer depth (MLD) between windows (i.e. deepening events only).
-- delta_N is the nitrate concentration difference across the base of the
-  mixed layer (sub-MLD minus within-MLD), accounting for the nitrate
-  entrained when the MLD deepens.
+where dN/dt is the change in depth-integrated nitrate between consecutive
+time windows, converted to carbon units via the Redfield ratio (C:N = 6.625)
+and normalised by dt.
 
 The integration depth for each window is the maximum of the current MLD,
 the previous MLD, the euphotic-zone depth (Zeu), and the previous Zeu,
@@ -193,14 +186,12 @@ affected downstream steps. To force a single rule to rerun regardless:
 | `data_dir` | string | Root directory for intermediate data (default: `data`). |
 | `raw_dir` | string | Shared directory for downloaded Sprof .nc files (default: `data/raw`). |
 | `output_dir` | string | Root directory for final outputs (default: `output`). |
-| `lon_min/max` | float | Longitude bounds of the study region (degrees East). |
-| `lat_min/max` | float | Latitude bounds of the study region (degrees North). |
+| `basins` | mapping | Named basins, each with a `polygon` key containing a list of `[lon, lat]` vertex pairs. Add as many basins as needed; the pipeline runs once per basin in parallel. |
 | `date_start` | string | Start of the analysis period (YYYY-MM-DD, exclusive). |
 | `date_end` | string | End of the analysis period (YYYY-MM-DD, exclusive). |
 | `ncp_time_steps` | list | Time step widths for the NCP calculation (e.g. `["10 days", "15 days"]`). Multiple values produce a sensitivity plot. |
 | `mld_spar` | float | Smoothing span for the LOESS fit to the MLD time series (0 to 1, default 0.3). |
 | `zeu_default` | float | Euphotic zone depth in metres when not computed dynamically (default 40). |
-| `use_entrainment` | bool | Include the entrainment correction term (we * delta_N) in the NCP calculation (default `true`). Set to `false` to compute NCP from nitrate drawdown alone. |
 | `uncertainty` | bool | Set to `true` to run the Monte Carlo uncertainty step. |
 | `n_mc` | integer | Number of Monte Carlo iterations (default 200). |
 | `canyon_rmse` | float | CANYON-B prediction uncertainty in mmol/m3, applied as correlated per-profile noise (default 1.2). |
@@ -263,7 +254,7 @@ Runs for each time step listed in `ncp_time_steps`. For each time step:
    empty bins with linear interpolation.
 5. Integrates nitrate from the surface to the integration depth for each
    bin using trapezoidal integration.
-6. Computes dN/dt and the entrainment correction term.
+6. Computes dN/dt and converts to carbon units via the Redfield ratio.
 7. Applies a final LOESS smooth to the NCP time series.
 
 The smoothing span for the final NCP LOESS is set adaptively as

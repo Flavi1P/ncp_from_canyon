@@ -70,6 +70,21 @@ def download_sprof_files(
     print(f"Manifest → {manifest_dir / 'download_manifest.csv'}")
 
 
+# ── Bounding box helper ────────────────────────────────────────────────────────
+def _bbox_from_config(cfg):
+    """Return (lon_min, lon_max, lat_min, lat_max) from config.
+    Supports both the old flat keys (lon_min/max, lat_min/max) and the new
+    basins dict, in which case the bbox is the union of all basin polygons."""
+    if "basins" in cfg:
+        all_lons, all_lats = [], []
+        for basin in cfg["basins"].values():
+            for lon, lat in basin["polygon"]:
+                all_lons.append(lon)
+                all_lats.append(lat)
+        return min(all_lons), max(all_lons), min(all_lats), max(all_lats)
+    return cfg["lon_min"], cfg["lon_max"], cfg["lat_min"], cfg["lat_max"]
+
+
 # ── Snakemake entry point ──────────────────────────────────────────────────────
 if __name__ == "__main__":
 
@@ -80,11 +95,12 @@ if __name__ == "__main__":
             print("Usage: python download_sprof.py config.yaml")
             sys.exit(1)
         cfg = yaml.safe_load(Path(sys.argv[1]).read_text())
+        lon_min, lon_max, lat_min, lat_max = _bbox_from_config(cfg)
         download_sprof_files(
-            lon_min      = cfg["lon_min"],
-            lon_max      = cfg["lon_max"],
-            lat_min      = cfg["lat_min"],
-            lat_max      = cfg["lat_max"],
+            lon_min      = lon_min,
+            lon_max      = lon_max,
+            lat_min      = lat_min,
+            lat_max      = lat_max,
             sprof_dir    = Path(cfg.get("raw_dir", "data/raw")),
             manifest_dir = Path(cfg["data_dir"]) / cfg["run_name"] / "raw",
             date_start   = cfg.get("date_start"),
@@ -94,11 +110,12 @@ if __name__ == "__main__":
     if "snakemake" in globals():
         # Running inside Snakemake pipeline
         sys.path.insert(0, str(Path(__file__).parent / "utils"))
+        lon_min, lon_max, lat_min, lat_max = _bbox_from_config(snakemake.config)
         download_sprof_files(
-            lon_min      = snakemake.config["lon_min"],
-            lon_max      = snakemake.config["lon_max"],
-            lat_min      = snakemake.config["lat_min"],
-            lat_max      = snakemake.config["lat_max"],
+            lon_min      = lon_min,
+            lon_max      = lon_max,
+            lat_min      = lat_min,
+            lat_max      = lat_max,
             sprof_dir    = Path(snakemake.config.get("raw_dir", "data/raw")),
             manifest_dir = Path(snakemake.output.manifest).parent,
             date_start   = snakemake.config.get("date_start"),

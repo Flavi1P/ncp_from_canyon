@@ -1,13 +1,27 @@
-run_name:   "NorthAtlantic_20s"
+run_name:   "NorthAtlantic_basins_comparison"
 data_dir:   "data"
 raw_dir:    "data/raw"
 output_dir: "output"
 
-# Spatial extent
-lon_min: -45
-lon_max: -10
-lat_min: 54
-lat_max: 63
+# Spatial extent -- named basins defined as lon/lat polygon vertices
+# Each polygon should be a closed or open ring; closing vertex is added automatically.
+# Iceland Basin: east of the Reykjanes Ridge, bounded by the Mid-Atlantic Ridge to the west
+# Irminger Sea:  west of the Reykjanes Ridge, bounded by Greenland to the northwest
+basins:
+  IcelandBasin:
+    polygon:
+      - [-42, 54]
+      - [-15, 54]
+      - [-15, 63]
+      - [-22, 63]
+      - [-22, 57]
+      - [-42, 57]
+  IrmingerSea:
+    polygon:
+      - [-45, 57]
+      - [-22, 57]
+      - [-22, 63]
+      - [-45, 63]
 
 # Temporal extent
 date_start: "2020-01-01"
@@ -17,11 +31,10 @@ date_end:   "2026-01-01"
 ncp_time_steps: ["10 days", "15 days", "20 days"]
 mld_spar:       0.3
 zeu_default:    40
-use_entrainment: true
 
 # Uncertainty estimation
 uncertainty: true
 n_mc:        200
-canyon_rmse: 1.2   # mmol/m³ — added to each profile as correlated vertical noise
+canyon_rmse: 1.2   # mmol/m3 -- added to each profile as correlated vertical noise
 
 ncp_method: "o2_budget"

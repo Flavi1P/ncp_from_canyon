@@ -23,6 +23,9 @@ dependencies:
   - r-data.table
   - r-seacarb
   - r-here
+  - r-sf
+  - r-furrr
+  - r-future
 
   # castr (MLD calculation) is not on conda -- install after creating the env:
   # Rscript -e "remotes::install_github('cassidymwagner/castr')"

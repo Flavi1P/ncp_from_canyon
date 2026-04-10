@@ -7,10 +7,12 @@ if (exists("snakemake")) {
   in_dir   <- snakemake@input[["in_dir"]]
   out_csv  <- snakemake@output[["merged_csv"]]
   out_map  <- snakemake@output[["map_png"]]
-  lon_min  <- snakemake@config[["lon_min"]]
-  lon_max  <- snakemake@config[["lon_max"]]
-  lat_min  <- snakemake@config[["lat_min"]]
-  lat_max  <- snakemake@config[["lat_max"]]
+  # derive bounding box as union of all basin polygon vertices
+  pts <- do.call(rbind, lapply(snakemake@config[["basins"]], function(b)
+    do.call(rbind, lapply(b[["polygon"]], as.numeric))
+  ))
+  lon_min <- min(pts[, 1]); lon_max <- max(pts[, 1])
+  lat_min <- min(pts[, 2]); lat_max <- max(pts[, 2])
 } else {
   args     <- commandArgs(trailingOnly = TRUE)
   in_dir   <- ifelse(length(args) > 0, args[1], "data/NorthAtlantic_2024/intermediate/nitrate_profiles")
