@@ -200,6 +200,7 @@ affected downstream steps. To force a single rule to rerun regardless:
 | `ncp_time_steps` | list | Time step widths for the NCP calculation (e.g. `["10 days", "15 days"]`). Multiple values produce a sensitivity plot. |
 | `mld_spar` | float | Smoothing span for the LOESS fit to the MLD time series (0 to 1, default 0.3). |
 | `zeu_default` | float | Euphotic zone depth in metres when not computed dynamically (default 40). |
+| `use_entrainment` | bool | Include the entrainment correction term (we * delta_N) in the NCP calculation (default `true`). Set to `false` to compute NCP from nitrate drawdown alone. |
 | `uncertainty` | bool | Set to `true` to run the Monte Carlo uncertainty step. |
 | `n_mc` | integer | Number of Monte Carlo iterations (default 200). |
 | `canyon_rmse` | float | CANYON-B prediction uncertainty in mmol/m3, applied as correlated per-profile noise (default 1.2). |
@@ -328,7 +329,6 @@ The main results CSV (`ncp_results.csv`) contains the following columns:
 | `date_grid` | Centre date of the time bin |
 | `mld` | Mean smoothed MLD for the bin (m) |
 | `NCP` | Net Community Production (mmol C m-2 d-1) |
-| `loess_ncp` | LOESS-smoothed NCP |
 | `time_step_label` | Which time step this row belongs to |
 
 ---

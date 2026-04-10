@@ -15,8 +15,9 @@ if (exists("snakemake")) {
   date_end    <- snakemake@config[["date_end"]]
   mld_spar    <- snakemake@config[["mld_spar"]]
   zeu_default <- snakemake@config[["zeu_default"]]
-  n_mc        <- snakemake@config[["n_mc"]]
-  canyon_rmse <- snakemake@config[["canyon_rmse"]]
+  n_mc            <- snakemake@config[["n_mc"]]
+  canyon_rmse     <- snakemake@config[["canyon_rmse"]]
+  use_entrainment <- isTRUE(snakemake@config[["use_entrainment"]])
 } else {
   args        <- commandArgs(trailingOnly = TRUE)
   merged_csv  <- ifelse(length(args) > 0, args[1],
@@ -32,8 +33,9 @@ if (exists("snakemake")) {
   date_end    <- "2024-01-01"
   mld_spar    <- 0.3
   zeu_default <- 40
-  n_mc        <- 200
-  canyon_rmse <- 1.2
+  n_mc            <- 200
+  canyon_rmse     <- 1.2
+  use_entrainment <- TRUE
 }
 
 out_dir <- dirname(results_csv)
@@ -52,7 +54,7 @@ integrate_nitrate <- function(nitrate, depth, from, to) {
 
 # ── NCP from a single nitrate realisation ────────────────────────────────────
 # dat_smoothed: already joined with prof_dat_smoothed, nitrate column = one MC draw
-ncp_from_nitrate <- function(dat_smoothed) {
+ncp_from_nitrate <- function(dat_smoothed, use_entrainment = TRUE) {
   dat_final <- dat_smoothed |>
     group_by(date_grid, mld, zeu) |>
     filter(!is.na(next_integration_depth)) |>
@@ -83,7 +85,7 @@ ncp_from_nitrate <- function(dat_smoothed) {
       diff_mld            = mld - lag(mld),
       we                  = pmax(0, diff_mld),
       delta               = sub_mld_concentration - mld_concentration,
-      diff                = delta * we,
+      diff                = if (use_entrainment) delta * we else 0,
       nitrate_consumption = lag(next_int_N_smooth) - int_N_smooth,
       c_consumption       = nitrate_consumption * 6.625 / dt,
       NCP                 = c_consumption + diff,
@@ -101,9 +103,10 @@ compute_ncp_mc <- function(
     date_start, date_end,
     zeu_default = 40,
     mld_spar    = 0.3,
-    n_mc        = 200,
-    canyon_rmse = 1.2,
-    label       = NULL
+    n_mc            = 200,
+    canyon_rmse     = 1.2,
+    use_entrainment = TRUE,
+    label           = NULL
 ) {
   if (is.null(label)) label <- time_step
 
@@ -239,7 +242,7 @@ compute_ncp_mc <- function(
         left_join(prof_dat_smoothed, by = "date_grid") |>
         na.omit()
 
-      ncp_from_nitrate(dat_smoothed) |> mutate(iter = i)
+      ncp_from_nitrate(dat_smoothed, use_entrainment = use_entrainment) |> mutate(iter = i)
     }, error = function(e) NULL)
   }) |>
     compact() |>
@@ -268,16 +271,17 @@ message("Running MC uncertainty for time steps: ", paste(time_steps, collapse = 
 all_mc <- map(time_steps, function(ts) {
   tryCatch(
     compute_ncp_mc(
-      dat         = dat,
-      time_step   = ts,
-      lon_min     = lon_min, lon_max = lon_max,
-      lat_min     = lat_min, lat_max = lat_max,
-      date_start  = date_start, date_end = date_end,
-      mld_spar    = mld_spar,
-      zeu_default = zeu_default,
-      n_mc        = n_mc,
-      canyon_rmse = canyon_rmse,
-      label       = ts
+      dat             = dat,
+      time_step       = ts,
+      lon_min         = lon_min, lon_max = lon_max,
+      lat_min         = lat_min, lat_max = lat_max,
+      date_start      = date_start, date_end = date_end,
+      mld_spar        = mld_spar,
+      zeu_default     = zeu_default,
+      n_mc            = n_mc,
+      canyon_rmse     = canyon_rmse,
+      use_entrainment = use_entrainment,
+      label           = ts
     ),
     error = function(e) { message("Failed for ", ts, ": ", e$message); NULL }
   )

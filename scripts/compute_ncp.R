@@ -13,8 +13,9 @@ if (exists("snakemake")) {
   lat_max     <- snakemake@config[["lat_max"]]
   date_start  <- snakemake@config[["date_start"]]
   date_end    <- snakemake@config[["date_end"]]
-  mld_spar    <- snakemake@config[["mld_spar"]]
-  zeu_default <- snakemake@config[["zeu_default"]]
+  mld_spar       <- snakemake@config[["mld_spar"]]
+  zeu_default    <- snakemake@config[["zeu_default"]]
+  use_entrainment <- isTRUE(snakemake@config[["use_entrainment"]])
 } else {
   args        <- commandArgs(trailingOnly = TRUE)
   merged_csv  <- ifelse(length(args) > 0, args[1],
@@ -26,8 +27,9 @@ if (exists("snakemake")) {
   lat_min     <-  58;  lat_max    <-  65
   date_start  <- "2023-01-01"
   date_end    <- "2024-01-01"
-  mld_spar    <- 0.3
-  zeu_default <- 40
+  mld_spar        <- 0.3
+  zeu_default     <- 40
+  use_entrainment <- TRUE
 }
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
@@ -50,9 +52,10 @@ compute_ncp <- function(
     time_step,
     lon_min, lon_max, lat_min, lat_max,
     date_start, date_end,
-    zeu_default = 40,
-    mld_spar    = 0.3,
-    label       = NULL
+    zeu_default     = 40,
+    mld_spar        = 0.3,
+    use_entrainment = TRUE,
+    label           = NULL
 ) {
 
   if (is.null(label)) label <- time_step
@@ -183,16 +186,14 @@ compute_ncp <- function(
       diff_mld            = mld - lag(mld),
       we                  = pmax(0, diff_mld),
       delta               = sub_mld_concentration - mld_concentration,
-      diff                = delta * we,
+      diff                = if (use_entrainment) delta * we else 0,
       nitrate_consumption = lag(next_int_N_smooth) - int_N_smooth,
       c_consumption       = nitrate_consumption * 6.625 / dt,
       NCP                 = c_consumption + diff,
-      NCP                 = case_when(NCP < -60 ~ NCP / 2, TRUE ~ NCP),
-      datenum             = as.numeric(date_grid)
+      NCP = case_when(NCP < -60 ~ NCP / 2, TRUE ~ NCP)
     ) |>
-    filter(!is.na(NCP))
-
-  ncp_results$time_step_label <- label
+    filter(!is.na(NCP)) |>
+    mutate(time_step_label = label)
 
   return(ncp_results)
 }
@@ -203,14 +204,15 @@ message("Running NCP for time steps: ", paste(time_steps, collapse = ", "))
 all_results <- map(time_steps, function(ts) {
   tryCatch(
     compute_ncp(
-      dat        = dat,
-      time_step  = ts,
-      lon_min    = lon_min, lon_max = lon_max,
-      lat_min    = lat_min, lat_max = lat_max,
-      date_start = date_start, date_end = date_end,
-      mld_spar   = mld_spar,
-      zeu_default= zeu_default,
-      label      = ts
+      dat             = dat,
+      time_step       = ts,
+      lon_min         = lon_min, lon_max = lon_max,
+      lat_min         = lat_min, lat_max = lat_max,
+      date_start      = date_start, date_end = date_end,
+      mld_spar        = mld_spar,
+      zeu_default     = zeu_default,
+      use_entrainment = use_entrainment,
+      label           = ts
     ),
     error = function(e) { message("Failed for ", ts, ": ", e$message); NULL }
   )
@@ -225,7 +227,7 @@ message("NCP results saved → ", results_csv)
 
 # ── Plots ─────────────────────────────────────────────────────────────────────
 p_sensitivity <- ggplot(all_results) +
-  geom_line(aes(x = date_grid, y = NCP,       color = time_step_label), alpha = 0.3) +
+  geom_line(aes(x = date_grid, y = NCP, color = time_step_label)) +
   scale_color_brewer(palette = "Set1", name = "Time step") +
   labs(y = "mmol C m⁻² d⁻¹", x = "Date",
        title = "NCP sensitivity to time step") +
