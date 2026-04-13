@@ -15,7 +15,6 @@ if (exists("snakemake")) {
   mld_spar        <- snakemake@config[["mld_spar"]]
   zeu_default     <- snakemake@config[["zeu_default"]]
   n_mc            <- snakemake@config[["n_mc"]]
-  canyon_rmse     <- snakemake@config[["canyon_rmse"]]
 } else {
   args          <- commandArgs(trailingOnly = TRUE)
   merged_csv    <- ifelse(length(args) > 0, args[1],
@@ -32,7 +31,6 @@ if (exists("snakemake")) {
   mld_spar        <- 0.3
   zeu_default     <- 40
   n_mc            <- 200
-  canyon_rmse     <- 1.2
 }
 
 out_dir <- dirname(results_csv)
@@ -99,7 +97,6 @@ compute_ncp_mc <- function(
     zeu_default = 40,
     mld_spar    = 0.3,
     n_mc        = 200,
-    canyon_rmse = 1.2,
     label       = NULL
 ) {
   if (is.null(label)) label <- time_step
@@ -204,12 +201,14 @@ compute_ncp_mc <- function(
         mutate(draw_id = row_number())
 
       dat_resampled <- resampled |>
-        left_join(dat_binned |> select(date_grid, float_wmo, prof_number, depth, canyon_nitrate),
+        left_join(dat_binned |> select(date_grid, float_wmo, prof_number, depth,
+                                       canyon_nitrate, canyon_nitrate_ci),
                   by = c("date_grid", "float_wmo", "prof_number"),
                   relationship = "many-to-many") |>
-        group_by(draw_id) |>
-        mutate(nitrate = canyon_nitrate + rnorm(1, 0, canyon_rmse)) |>
-        ungroup()
+        mutate(
+          ci = if_else(is.na(canyon_nitrate_ci), 1.2, canyon_nitrate_ci),
+          nitrate = canyon_nitrate + rnorm(n(), 0, ci)
+        )
 
       nitrate_binned <- dat_resampled |>
         group_by(date_grid, depth) |>
@@ -262,7 +261,6 @@ all_mc <- map(time_steps, function(ts) {
       mld_spar    = mld_spar,
       zeu_default = zeu_default,
       n_mc        = n_mc,
-      canyon_rmse = canyon_rmse,
       label       = ts
     ),
     error = function(e) { message("Failed for ", ts, ": ", e$message); NULL }

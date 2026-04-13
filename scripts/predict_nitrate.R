@@ -68,10 +68,12 @@ process_float <- function(file, out_dir, weights, utils_dir) {
       use_parallel = FALSE,   # within-float parallelism via mclapply does not work on Windows
       param        = "NO3"
     )
-    dat$canyon_nitrate <- nitrate$NO3
+    dat$canyon_nitrate    <- nitrate$NO3
+    dat$canyon_nitrate_ci <- nitrate$NO3_ci
   }, error = function(e) {
     message("CANYON-B failed for ", basename(file), ": ", e$message)
-    dat$canyon_nitrate <<- NA_real_
+    dat$canyon_nitrate    <<- NA_real_
+    dat$canyon_nitrate_ci <<- NA_real_
   })
 
   wmo      <- gsub("argo_(.*)_interp\\.csv", "\\1", basename(file))

@@ -1,4 +1,4 @@
-run_name:   "NorthAtlantic_basins_comparison"
+run_name:   "NorthAtlantic_seas_comparison"
 data_dir:   "data"
 raw_dir:    "data/raw"
 output_dir: "output"
@@ -10,18 +10,25 @@ output_dir: "output"
 basins:
   IcelandBasin:
     polygon:
-      - [-42, 54]
-      - [-15, 54]
-      - [-15, 63]
-      - [-22, 63]
-      - [-22, 57]
-      - [-42, 57]
+      - [-32, 57.4]
+      - [-22.4, 63]
+      - [-12, 63]
+      - [-23, 55.7]
+      - [-32, 57.4]
   IrmingerSea:
     polygon:
-      - [-45, 57]
-      - [-22, 57]
-      - [-22, 63]
-      - [-45, 63]
+      - [-36.5, 57]
+      - [-26, 63]
+      - [-32.7, 65.2]
+      - [-42.8, 59.29]
+      - [-36.5, 57]
+  LabradorSea:
+    polygon:
+      - [-50.5, 53.8]
+      - [-44.5, 58.5]
+      - [-52.8, 62.5]
+      - [-60.4, 60.4]
+      - [-50.5, 53.8]
 
 # Temporal extent
 date_start: "2020-01-01"
@@ -29,12 +36,11 @@ date_end:   "2026-01-01"
 
 # NCP parameters
 ncp_time_steps: ["15 days"]
-mld_spar:       0.3
+mld_spar:       0.03
 zeu_default:    40
 
 # Uncertainty estimation
 uncertainty: true
-n_mc:        200
-canyon_rmse: 1.2   # mmol/m3 -- added to each profile as correlated vertical noise
+n_mc:        100
 
 ncp_method: "o2_budget"

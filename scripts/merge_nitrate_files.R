@@ -95,7 +95,7 @@ message("MLD plot saved → ", mld_plot_path)
 # ── Select final columns and save ─────────────────────────────────────────────
 merged_out <- dat_all |>
   select(float_wmo, prof_number, date, lon, lat,
-         canyon_nitrate, sa, ct, sigma0, MLD,
+         canyon_nitrate, canyon_nitrate_ci, sa, ct, sigma0, MLD,
          sal, oxygen, depth)
 
 write_csv(merged_out, out_csv)
