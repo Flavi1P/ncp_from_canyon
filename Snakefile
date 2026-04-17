@@ -22,6 +22,17 @@ if config.get("uncertainty", False):
         expand(_unc_png, basin=BASINS) +
         [f"{OUT}/ncp/basins_comparison.png"]
     )
+if config.get("compute_npp", False):
+    _npp_ts_csv  = f"{OUT}/npp/{{basin}}/npp_timeseries.csv"
+    _npp_ts_png  = f"{OUT}/npp/{{basin}}/npp_vs_ncp.png"
+    _npp_map_png = f"{OUT}/npp/{{basin}}/npp_map.png"
+    _all_outputs += (
+        expand(_npp_ts_csv,  basin=BASINS) +
+        expand(_npp_ts_png,  basin=BASINS) +
+        expand(_npp_map_png, basin=BASINS) +
+        [f"{OUT}/npp/basins_npp_comparison.png",
+         f"{OUT}/npp/basins_npp_map.png"]
+    )
 
 rule all:
     input: _all_outputs
@@ -45,6 +56,77 @@ rule process_sprof:
         manifest = f"{DATA}/intermediate/doxy_profiles/processing_manifest.csv"
     script:
         "scripts/process_sprof.R"
+
+rule process_cphyto:
+    input:
+        manifest  = f"{DATA}/raw/download_manifest.csv",
+        wmo_list  = f"{DATA}/raw/wmo_list.txt"
+    params:
+        sprof_dir = RAW
+    output:
+        out_dir  = directory(f"{DATA}/intermediate/cphyto_profiles"),
+        manifest = f"{DATA}/intermediate/cphyto_profiles/cphyto_manifest.csv"
+    script:
+        "scripts/process_cphyto.py"
+
+if config.get("compute_npp", False):
+    rule download_par:
+        input:
+            cphyto_dir = f"{DATA}/intermediate/cphyto_profiles",
+            cphyto_manifest = f"{DATA}/intermediate/cphyto_profiles/cphyto_manifest.csv"
+        params:
+            par_dir = f"{RAW}/modis_par"
+        output:
+            manifest = f"{DATA}/raw/par_download_manifest.csv"
+        script:
+            "scripts/download_par.py"
+
+    rule match_par:
+        input:
+            cphyto_dir   = f"{DATA}/intermediate/cphyto_profiles",
+            par_manifest = f"{DATA}/raw/par_download_manifest.csv"
+        output:
+            matched_csv = f"{DATA}/intermediate/par_matched/par_matched.csv"
+        script:
+            "scripts/match_par.py"
+
+    rule compute_npp:
+        input:
+            cphyto_dir      = f"{DATA}/intermediate/cphyto_profiles",
+            par_matched_csv = f"{DATA}/intermediate/par_matched/par_matched.csv"
+        output:
+            profiles_csv   = f"{DATA}/intermediate/npp/npp_profiles.csv",
+            integrated_csv = f"{DATA}/intermediate/npp/npp_integrated.csv"
+        script:
+            "scripts/compute_npp.py"
+
+    rule npp_timeseries:
+        input:
+            integrated_csv = f"{DATA}/intermediate/npp/npp_integrated.csv",
+            ncp_csv        = f"{OUT}/ncp/{{basin}}/ncp_results.csv"
+        params:
+            basin_name    = lambda wc: wc.basin,
+            basin_polygon = lambda wc: config["basins"][wc.basin]["polygon"]
+        output:
+            ts_csv   = f"{OUT}/npp/{{basin}}/npp_timeseries.csv",
+            plot_png = f"{OUT}/npp/{{basin}}/npp_vs_ncp.png",
+            map_png  = f"{OUT}/npp/{{basin}}/npp_map.png"
+        wildcard_constraints:
+            basin = "|".join(BASINS)
+        script:
+            "scripts/npp_timeseries.py"
+
+    rule compare_basins_npp:
+        input:
+            integrated_csv = f"{DATA}/intermediate/npp/npp_integrated.csv",
+            ts_csvs        = expand(f"{OUT}/npp/{{basin}}/npp_timeseries.csv", basin=BASINS)
+        params:
+            basin_names = BASINS
+        output:
+            ts_fig  = f"{OUT}/npp/basins_npp_comparison.png",
+            map_fig = f"{OUT}/npp/basins_npp_map.png"
+        script:
+            "scripts/compare_basins_npp.py"
 
 rule predict_nitrate:
     input:

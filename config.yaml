@@ -44,3 +44,9 @@ uncertainty: true
 n_mc:        100
 
 ncp_method: "o2_budget"
+
+# NPP estimation (CbPM). Set to false to skip all NPP-related steps (PAR
+# download, match, compute_npp, NPP plots). NCP pipeline is unaffected.
+compute_npp: true
+# NPP inputs — MODIS-Aqua L3m PAR resolution ('9' or '4' km)
+par_resolution_km: 9

@@ -214,3 +214,5 @@ data/
 
 #vscode settings
 .vscode/
+.dodsrc
+.claude/

@@ -12,6 +12,9 @@ dependencies:
   - pyyaml
   - pip:
       - scipy
+      - earthaccess
+      - matplotlib
+      - shapely
 
   # R
   - r-base>=4.1
