@@ -39,7 +39,7 @@ BBP_WINDOW = 11     # samples (=metres here) for Briggs despike
 # BGC-Argo ADJUSTED QC flags considered usable: 1=good, 2=probably good,
 # 5=value changed (real-time correction applied — dominant for CHLA/BBP),
 # 8=interpolated/estimated (e.g. CHLA NPQ correction).
-QC_OK = {"1", "2", "5", "8"}
+QC_OK = {"1", "2", "3", "5", "8"}
 
 TARGET_DEPTHS = np.arange(DEPTH_MIN, DEPTH_MAX + 1, DEPTH_STEP)
 

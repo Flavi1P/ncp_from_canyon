@@ -36,7 +36,6 @@ date_end:   "2026-01-01"
 
 # NCP parameters
 ncp_time_steps: ["15 days"]
-mld_spar:       0.03
 zeu_default:    40
 
 # Uncertainty estimation

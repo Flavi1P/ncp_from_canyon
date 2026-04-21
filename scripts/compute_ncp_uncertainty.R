@@ -12,7 +12,6 @@ if (exists("snakemake")) {
   basin_polygon   <- snakemake@params[["basin_polygon"]]
   date_start      <- snakemake@config[["date_start"]]
   date_end        <- snakemake@config[["date_end"]]
-  mld_spar        <- snakemake@config[["mld_spar"]]
   zeu_default     <- snakemake@config[["zeu_default"]]
   n_mc            <- snakemake@config[["n_mc"]]
 } else {
@@ -28,7 +27,6 @@ if (exists("snakemake")) {
   basin_polygon <- list(c(-42,54), c(-15,54), c(-15,63), c(-22,63), c(-22,57), c(-42,57))
   date_start      <- "2020-01-01"
   date_end        <- "2026-01-01"
-  mld_spar        <- 0.3
   zeu_default     <- 40
   n_mc            <- 200
 }
@@ -95,7 +93,6 @@ compute_ncp_mc <- function(
     basin_poly,
     date_start, date_end,
     zeu_default = 40,
-    mld_spar    = 0.3,
     n_mc        = 200,
     label       = NULL
 ) {
@@ -119,43 +116,22 @@ compute_ncp_mc <- function(
   if (nrow(dat) == 0) stop("No data after filtering for: ", label)
   message(label, ": ", nrow(dat), " rows after filtering")
 
-  # ── MLD / Zeu smoothing ───────────────────────────────────────────────────────
+  # ── MLD / Zeu — bin average ───────────────────────────────────────────────────
   dat_prof <- dat |>
     select(float_wmo, prof_number, date, MLD, zeu) |>
     distinct() |>
-    arrange(date) |>
     filter(!is.na(MLD), !is.na(zeu))
-
-  dat_smooth <- dat_prof |> filter(!is.na(date), !is.na(MLD))
-  fit_mld    <- loess(MLD ~ as.numeric(date), data = dat_smooth,
-                      span = mld_spar, family = "symmetric")
-  fit_zeu    <- smooth.spline(as.numeric(dat_smooth$date), dat_smooth$zeu, spar = 0.6)
-
-  dat_prof <- dat_prof |>
-    mutate(
-      mld_smooth = pmax(predict(fit_mld,
-                                newdata = data.frame(date = as.numeric(dat_prof$date))), 0),
-      zeu_smooth = predict(fit_zeu, as.numeric(dat_prof$date))$y
-    )
-
-  dat <- left_join(dat,
-                   select(dat_prof, prof_number, float_wmo, mld_smooth, zeu_smooth),
-                   by = c("float_wmo", "prof_number"))
 
   # ── Time grid & integration depths ───────────────────────────────────────────
   time_grid <- tibble(
     date_grid = seq(min(dat_prof$date), max(dat_prof$date), by = time_step)
   )
 
-  prof_dat_smoothed <- dat |>
-    group_by(float_wmo, prof_number, date) |>
-    summarise(mld_smooth = unique(mld_smooth),
-              zeu_smooth = unique(zeu_smooth),
-              .groups    = "drop") |>
+  prof_dat_smoothed <- dat_prof |>
     mutate(date_grid = as.Date(cut(date, breaks = time_step))) |>
     group_by(date_grid) |>
-    summarise(mld = mean(mld_smooth, na.rm = TRUE),
-              zeu = mean(zeu_smooth, na.rm = TRUE),
+    summarise(mld = mean(MLD, na.rm = TRUE),
+              zeu = mean(zeu, na.rm = TRUE),
               .groups = "drop") |>
     mutate(
       prev_MLD               = lag(mld),
@@ -258,7 +234,6 @@ all_mc <- map(time_steps, function(ts) {
       time_step       = ts,
       basin_poly      = basin_poly,
       date_start      = date_start, date_end = date_end,
-      mld_spar    = mld_spar,
       zeu_default = zeu_default,
       n_mc        = n_mc,
       label       = ts

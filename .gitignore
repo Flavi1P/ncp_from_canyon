@@ -216,3 +216,5 @@ data/
 .vscode/
 .dodsrc
 .claude/
+output/Alex_flux_study/
+alex_config.yaml

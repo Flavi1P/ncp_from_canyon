@@ -8,7 +8,17 @@
       "Bash(rm \"c:/Users/petit/Documents/ncp_from_canyon/scripts/_test_mc.R\")",
       "Bash(timeout 120 '/c/Program Files/R/R-4.5.2/bin/Rscript.exe' --vanilla -e ':*)",
       "Bash(\"/c/Program Files/R/R-4.5.2/bin/Rscript.exe\" --vanilla scripts/_test_mc.R)",
-      "Bash(\"/c/Program Files/R/R-4.5.2/bin/Rscript.exe\" --vanilla scripts/_compare_entrainment.R)"
+      "Bash(\"/c/Program Files/R/R-4.5.2/bin/Rscript.exe\" --vanilla scripts/_compare_entrainment.R)",
+      "Bash(python -c ' *)",
+      "Bash(conda env *)",
+      "Bash(conda run -n argo-ncp python -c ' *)",
+      "Bash(c:/Users/petit/miniconda3/envs/argo-ncp/python.exe -c ' *)",
+      "Bash(c:/Users/petit/miniconda3/envs/argo-ncp/python.exe -c \"import xarray; print\\(xarray.__version__\\)\")",
+      "Read(//c/Users/petit/miniconda3/envs/argo-ncp/**)",
+      "Bash(\"c:/Users/petit/miniconda3/envs/argo-ncp/python.exe\" -c \"import xarray; print\\(xarray.__version__\\)\")",
+      "Bash(cmd.exe //c \"c:\\\\Users\\\\petit\\\\miniconda3\\\\envs\\\\argo-ncp\\\\python.exe -c \\\\\"import xarray; print\\(xarray.__version__\\)\\\\\"\")",
+      "Bash(/c/Users/petit/miniconda3/envs/argo-ncp/python.exe _probe.py)",
+      "Bash(\"/c/Users/petit/miniconda3/envs/argo-ncp/python.exe\" _probe.py)"
     ],
     "additionalDirectories": [
       "c:\\Users\\petit\\Documents\\ncp_from_canyon\\scripts"
