@@ -7,17 +7,21 @@ library(readr)
 
 # ── Snakemake / CLI input handling ────────────────────────────────────────────
 if (exists("snakemake")) {
-  sprof_dir <- snakemake@params[["sprof_dir"]]
-  out_dir   <- snakemake@output[["out_dir"]]
+  sprof_dir     <- snakemake@params[["sprof_dir"]]
+  shared_dir    <- snakemake@params[["shared_dir"]]
+  manifest_path <- snakemake@output[["manifest"]]
 } else {
-  # CLI fallback for testing
-  args      <- commandArgs(trailingOnly = TRUE)
-  sprof_dir <- ifelse(length(args) > 0, args[1], "data/NorthAtlantic_test/raw")
-  out_dir   <- ifelse(length(args) > 1, args[2], "data/NorthAtlantic_test/intermediate/doxy_profiles")
+  args          <- commandArgs(trailingOnly = TRUE)
+  sprof_dir     <- ifelse(length(args) > 0, args[1], "data/raw")
+  shared_dir    <- ifelse(length(args) > 1, args[2], "data/shared")
+  manifest_path <- ifelse(length(args) > 2, args[3],
+                          "data/NorthAtlantic_seas_comparison/intermediate/doxy_profiles/processing_manifest.csv")
 }
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+shared_doxy_dir <- file.path(shared_dir, "doxy_profiles")
+dir.create(shared_doxy_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(dirname(manifest_path), recursive = TRUE, showWarnings = FALSE)
 
 files <- list.files(sprof_dir, pattern = "_Sprof.nc", full.names = TRUE)
 message("Found ", length(files), " Sprof files in ", sprof_dir)
@@ -29,7 +33,17 @@ for (file in files) {
 
   i <- i + 1
   setTxtProgressBar(pb, i)
-  nc <- nc_open(file)
+
+  nc  <- nc_open(file)
+  wmo <- gsub(" ", "", ncvar_get(nc, "PLATFORM_NUMBER")[1])
+
+  filename <- file.path(shared_doxy_dir, paste0("argo_", wmo, "_interp.csv"))
+
+  if (file.exists(filename)) {
+    message("Skipping ", wmo, " (already in shared)")
+    nc_close(nc)
+    next
+  }
 
   if (!"DOXY_ADJUSTED" %in% names(nc$var)) {
     message("DOXY_ADJUSTED not found: ", file)
@@ -49,8 +63,6 @@ for (file in files) {
   sal    <- ncvar_get(nc, "PSAL")
   oxygen <- ncvar_get(nc, "DOXY_ADJUSTED")
   qc     <- ncvar_get(nc, "DOXY_ADJUSTED_QC")
-  wmo    <- gsub(" ", "", ncvar_get(nc, "PLATFORM_NUMBER")[1])
-
   nc_close(nc)
 
   # dimensions
@@ -105,8 +117,6 @@ for (file in files) {
     arrange(date) |>
     mutate(prof_number = dense_rank(date))
 
-  # save
-  filename <- file.path(out_dir, paste0("argo_", wmo, "_interp.csv"))
   write_csv(df_interp, filename)
   message(filename, " written")
 }
@@ -114,10 +124,11 @@ for (file in files) {
 close(pb)
 message("Done. Processed ", i, " floats.")
 
-# Signal completion to Snakemake by writing a manifest
+# Write manifest pointing to all shared files
+shared_files <- list.files(shared_doxy_dir, pattern = "_interp\\.csv$", full.names = TRUE)
 manifest <- data.frame(
-  wmo  = gsub(".*argo_(.*)_interp.csv", "\\1",
-               list.files(out_dir, pattern = "_interp.csv")),
-  path = list.files(out_dir, pattern = "_interp.csv", full.names = TRUE)
+  wmo  = gsub(".*argo_(.*)_interp\\.csv", "\\1", basename(shared_files)),
+  path = shared_files
 )
-write_csv(manifest, file.path(out_dir, "processing_manifest.csv"))
+write_csv(manifest, manifest_path)
+message("Manifest -> ", manifest_path)

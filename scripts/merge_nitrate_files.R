@@ -4,9 +4,9 @@ library(here)
 
 # ── Snakemake / CLI input handling ────────────────────────────────────────────
 if (exists("snakemake")) {
-  in_dir   <- snakemake@input[["in_dir"]]
-  out_csv  <- snakemake@output[["merged_csv"]]
-  out_map  <- snakemake@output[["map_png"]]
+  in_manifest <- snakemake@input[["manifest"]]
+  out_csv     <- snakemake@output[["merged_csv"]]
+  out_map     <- snakemake@output[["map_png"]]
   # derive bounding box as union of all basin polygon vertices
   pts <- do.call(rbind, lapply(snakemake@config[["basins"]], function(b)
     do.call(rbind, lapply(b[["polygon"]], as.numeric))
@@ -14,10 +14,11 @@ if (exists("snakemake")) {
   lon_min <- min(pts[, 1]); lon_max <- max(pts[, 1])
   lat_min <- min(pts[, 2]); lat_max <- max(pts[, 2])
 } else {
-  args     <- commandArgs(trailingOnly = TRUE)
-  in_dir   <- ifelse(length(args) > 0, args[1], "data/NorthAtlantic_2024/intermediate/nitrate_profiles")
-  out_csv  <- ifelse(length(args) > 1, args[2], "data/NorthAtlantic_2024/intermediate/merged/merged_ncp.csv")
-  out_map  <- ifelse(length(args) > 2, args[3], "data/NorthAtlantic_2024/intermediate/merged/float_map.png")
+  args        <- commandArgs(trailingOnly = TRUE)
+  in_manifest <- ifelse(length(args) > 0, args[1],
+                        "data/NorthAtlantic_seas_comparison/intermediate/nitrate_profiles/nitrate_manifest.csv")
+  out_csv     <- ifelse(length(args) > 1, args[2], "data/NorthAtlantic_seas_comparison/intermediate/merged/merged_ncp.csv")
+  out_map     <- ifelse(length(args) > 2, args[3], "data/NorthAtlantic_seas_comparison/intermediate/merged/float_map.png")
   lon_min  <- -45; lon_max <- -10
   lat_min  <-  54; lat_max <-  63
 }
@@ -27,10 +28,9 @@ out_dir <- dirname(out_csv)
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 # ── Merge all per-float CSV files ─────────────────────────────────────────────
-files <- list.files(in_dir, pattern = "_nitrate\\.csv$", full.names = TRUE)
-# exclude the manifest
-files <- files[!grepl("manifest", files)]
-message("Merging ", length(files), " float files from ", in_dir)
+manifest_df <- read_csv(in_manifest, show_col_types = FALSE)
+files       <- manifest_df$path
+message("Merging ", length(files), " float files from manifest")
 
 dat <- map_dfr(files, function(file) {
   dat_temp <- read_csv(file, show_col_types = FALSE)

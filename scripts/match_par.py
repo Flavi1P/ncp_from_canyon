@@ -27,18 +27,20 @@ def _nearest_idx(coord: np.ndarray, target: np.ndarray) -> np.ndarray:
 
 
 def match_par(
-    cphyto_dir:   Path,
-    par_manifest: Path,
-    out_csv:      Path,
+    cphyto_manifest: Path,
+    par_manifest:    Path,
+    out_csv:         Path,
 ) -> None:
-    cphyto_dir   = Path(cphyto_dir)
-    par_manifest = Path(par_manifest)
-    out_csv      = Path(out_csv)
+    cphyto_manifest = Path(cphyto_manifest)
+    par_manifest    = Path(par_manifest)
+    out_csv         = Path(out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
+
+    cphyto_paths = pd.read_csv(cphyto_manifest)["path"].tolist()
 
     # Profile-level table (one row per profile)
     frames = []
-    for csv in cphyto_dir.glob("argo_*_cphyto.csv"):
+    for csv in cphyto_paths:
         df = pd.read_csv(csv, usecols=["float_wmo", "prof_number", "date", "lon", "lat"])
         frames.append(df.drop_duplicates(subset=["float_wmo", "prof_number"]))
     if not frames:
@@ -89,13 +91,13 @@ def match_par(
 if __name__ == "__main__":
     if "snakemake" in globals():
         match_par(
-            cphyto_dir   = Path(snakemake.input["cphyto_dir"]),     # noqa: F821
-            par_manifest = Path(snakemake.input["par_manifest"]),   # noqa: F821
-            out_csv      = Path(snakemake.output["matched_csv"]),   # noqa: F821
+            cphyto_manifest = Path(snakemake.input["cphyto_manifest"]),  # noqa: F821
+            par_manifest    = Path(snakemake.input["par_manifest"]),      # noqa: F821
+            out_csv         = Path(snakemake.output["matched_csv"]),      # noqa: F821
         )
     else:
-        args = sys.argv[1:]
-        cphyto_dir   = Path(args[0]) if len(args) > 0 else Path("data/NorthAtlantic_seas_comparison/intermediate/cphyto_profiles")
-        par_manifest = Path(args[1]) if len(args) > 1 else Path("data/NorthAtlantic_seas_comparison/raw/par_download_manifest.csv")
-        out_csv      = Path(args[2]) if len(args) > 2 else Path("data/NorthAtlantic_seas_comparison/intermediate/par_matched/par_matched.csv")
-        match_par(cphyto_dir, par_manifest, out_csv)
+        args            = sys.argv[1:]
+        cphyto_manifest = Path(args[0]) if len(args) > 0 else Path("data/NorthAtlantic_seas_comparison/intermediate/cphyto_profiles/cphyto_manifest.csv")
+        par_manifest    = Path(args[1]) if len(args) > 1 else Path("data/NorthAtlantic_seas_comparison/raw/par_download_manifest.csv")
+        out_csv         = Path(args[2]) if len(args) > 2 else Path("data/NorthAtlantic_seas_comparison/intermediate/par_matched/par_matched.csv")
+        match_par(cphyto_manifest, par_manifest, out_csv)

@@ -60,13 +60,15 @@ def _run_one(chl_z: np.ndarray, cphyto_z: np.ndarray,
     }
 
 
-def compute_npp(cphyto_dir: Path, par_matched_csv: Path,
+def compute_npp(cphyto_manifest: Path, par_matched_csv: Path,
                 out_profiles_csv: Path, out_integrated_csv: Path) -> None:
-    cphyto_dir         = Path(cphyto_dir)
+    cphyto_manifest    = Path(cphyto_manifest)
     par_matched_csv    = Path(par_matched_csv)
     out_profiles_csv   = Path(out_profiles_csv)
     out_integrated_csv = Path(out_integrated_csv)
     out_profiles_csv.parent.mkdir(parents=True, exist_ok=True)
+
+    cphyto_paths = pd.read_csv(cphyto_manifest)["path"].tolist()
 
     par_df = pd.read_csv(par_matched_csv, parse_dates=["date"])
     par_df["float_wmo"] = par_df["float_wmo"].astype(str)
@@ -75,7 +77,7 @@ def compute_npp(cphyto_dir: Path, par_matched_csv: Path,
     profile_rows, integrated_rows = [], []
     skipped_no_par = skipped_bad_cbpm = 0
 
-    for csv in sorted(cphyto_dir.glob("argo_*_cphyto.csv")):
+    for csv in sorted(cphyto_paths):
         df = pd.read_csv(csv, parse_dates=["date"])
         df["float_wmo"] = df["float_wmo"].astype(str)
 
@@ -143,16 +145,16 @@ def compute_npp(cphyto_dir: Path, par_matched_csv: Path,
 if __name__ == "__main__":
     if "snakemake" in globals():
         compute_npp(
-            cphyto_dir         = Path(snakemake.input["cphyto_dir"]),         # noqa: F821
+            cphyto_manifest    = Path(snakemake.input["cphyto_manifest"]),    # noqa: F821
             par_matched_csv    = Path(snakemake.input["par_matched_csv"]),    # noqa: F821
             out_profiles_csv   = Path(snakemake.output["profiles_csv"]),      # noqa: F821
             out_integrated_csv = Path(snakemake.output["integrated_csv"]),    # noqa: F821
         )
     else:
         args = sys.argv[1:]
-        base = Path("data/NorthAtlantic_seas_comparison")
-        cphyto_dir      = Path(args[0]) if len(args) > 0 else base / "intermediate/cphyto_profiles"
+        base            = Path("data/NorthAtlantic_seas_comparison")
+        cphyto_manifest = Path(args[0]) if len(args) > 0 else base / "intermediate/cphyto_profiles/cphyto_manifest.csv"
         par_matched_csv = Path(args[1]) if len(args) > 1 else base / "intermediate/par_matched/par_matched.csv"
         out_profiles    = Path(args[2]) if len(args) > 2 else base / "intermediate/npp/npp_profiles.csv"
         out_integrated  = Path(args[3]) if len(args) > 3 else base / "intermediate/npp/npp_integrated.csv"
-        compute_npp(cphyto_dir, par_matched_csv, out_profiles, out_integrated)
+        compute_npp(cphyto_manifest, par_matched_csv, out_profiles, out_integrated)

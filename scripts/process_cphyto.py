@@ -90,14 +90,36 @@ def _bin_and_fill(df_raw: pd.DataFrame) -> pd.DataFrame | None:
     return df.reset_index()
 
 
+# ── Variable reader with _ADJUSTED → raw fallback ────────────────────────────
+def _read_var(ds: xr.Dataset, var: str):
+    """Read VAR_ADJUSTED+QC if non-empty; else fall back to VAR+QC.
+    Returns (values, qc_array_or_None), or (None, None) if unavailable."""
+    for name, qc_name in [
+        (f"{var}_ADJUSTED", f"{var}_ADJUSTED_QC"),
+        (var,               f"{var}_QC"),
+    ]:
+        if name not in ds.variables:
+            continue
+        vals = ds[name].values.astype(float)
+        if np.all(np.isnan(vals)):
+            continue
+        qc = ds[qc_name].values if qc_name in ds.variables else None
+        return vals, qc
+    return None, None
+
+
 # ── Main per-float pipeline ──────────────────────────────────────────────────
-def process_float(sprof_path: Path, out_dir: Path) -> dict | None:
+def process_float(sprof_path: Path, shared_cphyto_dir: Path) -> dict | None:
     """Process one Sprof file; write CSV and return a manifest row, or None."""
     ds = xr.open_dataset(sprof_path)
 
-    required = {"CHLA_ADJUSTED", "BBP700_ADJUSTED",
-                "TEMP_ADJUSTED", "PSAL_ADJUSTED", "PRES_ADJUSTED"}
-    if not required.issubset(ds.variables):
+    pres, _        = _read_var(ds, "PRES")
+    temp, temp_qc  = _read_var(ds, "TEMP")
+    sal,  sal_qc   = _read_var(ds, "PSAL")
+    chla, chla_qc  = _read_var(ds, "CHLA")
+    bbp,  bbp_qc   = _read_var(ds, "BBP700")
+
+    if any(v is None for v in (pres, temp, sal, chla, bbp)):
         ds.close()
         return None
 
@@ -106,19 +128,21 @@ def process_float(sprof_path: Path, out_dir: Path) -> dict | None:
     lon = ds["LONGITUDE"].values
     lat = ds["LATITUDE"].values
     date = pd.to_datetime(ds["JULD"].values).date
-
-    pres = ds["PRES_ADJUSTED"].values
-    temp = ds["TEMP_ADJUSTED"].values
-    sal  = ds["PSAL_ADJUSTED"].values
-    chla = ds["CHLA_ADJUSTED"].values
-    bbp  = ds["BBP700_ADJUSTED"].values
-
-    # QC masks — keep flags 1 & 2 per variable
-    temp = np.where(_qc_mask(ds["TEMP_ADJUSTED_QC"].values), temp, np.nan)
-    sal  = np.where(_qc_mask(ds["PSAL_ADJUSTED_QC"].values), sal,  np.nan)
-    chla = np.where(_qc_mask(ds["CHLA_ADJUSTED_QC"].values), chla, np.nan)
-    bbp  = np.where(_qc_mask(ds["BBP700_ADJUSTED_QC"].values), bbp, np.nan)
     ds.close()
+
+    csv_path = shared_cphyto_dir / f"argo_{wmo}_cphyto.csv"
+    if csv_path.exists():
+        return {"wmo": wmo, "n_profiles": None, "path": str(csv_path), "skipped": True}
+
+    # Apply QC masks where available
+    if temp_qc is not None:
+        temp = np.where(_qc_mask(temp_qc), temp, np.nan)
+    if sal_qc is not None:
+        sal  = np.where(_qc_mask(sal_qc),  sal,  np.nan)
+    if chla_qc is not None:
+        chla = np.where(_qc_mask(chla_qc), chla, np.nan)
+    if bbp_qc is not None:
+        bbp  = np.where(_qc_mask(bbp_qc),  bbp,  np.nan)
 
     n_prof = pres.shape[0]
     kept = []
@@ -155,16 +179,16 @@ def process_float(sprof_path: Path, out_dir: Path) -> dict | None:
         return None
 
     out = pd.concat(kept, ignore_index=True)
-    csv_path = out_dir / f"argo_{wmo}_cphyto.csv"
     out.to_csv(csv_path, index=False)
     return {"wmo": wmo, "n_profiles": out["prof_number"].nunique(), "path": str(csv_path)}
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────
-def main(sprof_dir: Path, out_dir: Path, manifest_path: Path) -> None:
-    sprof_dir = Path(sprof_dir)
-    out_dir   = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+def main(sprof_dir: Path, shared_dir: Path, manifest_path: Path) -> None:
+    sprof_dir         = Path(sprof_dir)
+    shared_cphyto_dir = Path(shared_dir) / "cphyto_profiles"
+    shared_cphyto_dir.mkdir(parents=True, exist_ok=True)
+    Path(manifest_path).parent.mkdir(parents=True, exist_ok=True)
 
     files = sorted(sprof_dir.glob("*_Sprof.nc"))
     print(f"Found {len(files)} Sprof files in {sprof_dir}")
@@ -172,12 +196,15 @@ def main(sprof_dir: Path, out_dir: Path, manifest_path: Path) -> None:
     rows = []
     for i, f in enumerate(files, 1):
         try:
-            row = process_float(f, out_dir)
+            row = process_float(f, shared_cphyto_dir)
         except Exception as e:
             print(f"  [{i}/{len(files)}] {f.name}: FAILED ({e})")
             continue
         if row is None:
-            print(f"  [{i}/{len(files)}] {f.name}: skipped (no CHLA/BBP or no valid profiles)")
+            print(f"  [{i}/{len(files)}] {f.name}: skipped (missing CHLA/BBP/PRES or no valid profiles)")
+        elif row.get("skipped"):
+            print(f"  [{i}/{len(files)}] {f.name}: skipped (already in shared)")
+            rows.append(row)
         else:
             print(f"  [{i}/{len(files)}] {f.name}: {row['n_profiles']} profiles kept")
             rows.append(row)
@@ -189,13 +216,15 @@ def main(sprof_dir: Path, out_dir: Path, manifest_path: Path) -> None:
 if __name__ == "__main__":
     if "snakemake" in globals():
         main(
-            sprof_dir     = Path(snakemake.params["sprof_dir"]),                    # noqa: F821
-            out_dir       = Path(snakemake.output["out_dir"]),                      # noqa: F821
-            manifest_path = Path(snakemake.output["manifest"]),                     # noqa: F821
+            sprof_dir     = Path(snakemake.params["sprof_dir"]),    # noqa: F821
+            shared_dir    = Path(snakemake.params["shared_dir"]),   # noqa: F821
+            manifest_path = Path(snakemake.output["manifest"]),     # noqa: F821
         )
     else:
-        args = sys.argv[1:]
-        sprof_dir = Path(args[0]) if len(args) > 0 else Path("data/raw")
-        out_dir   = Path(args[1]) if len(args) > 1 else Path("data/NorthAtlantic_seas_comparison/intermediate/cphyto_profiles")
-        manifest  = out_dir / "cphyto_manifest.csv"
-        main(sprof_dir, out_dir, manifest)
+        args       = sys.argv[1:]
+        sprof_dir  = Path(args[0]) if len(args) > 0 else Path("data/raw")
+        shared_dir = Path(args[1]) if len(args) > 1 else Path("data/shared")
+        manifest   = Path(args[2]) if len(args) > 2 else Path(
+            "data/NorthAtlantic_seas_comparison/intermediate/cphyto_profiles/cphyto_manifest.csv"
+        )
+        main(sprof_dir, shared_dir, manifest)

@@ -1,9 +1,10 @@
-configfile: "alex_config.yaml"
+configfile: "config.yaml"
 
 RUN    = config["run_name"]
 DATA   = f"{config['data_dir']}/{RUN}"
 OUT    = f"{config['output_dir']}/{RUN}"
 RAW    = config.get("raw_dir", "data/raw")
+SHARED = config.get("shared_dir", "data/shared")
 BASINS = list(config["basins"].keys())
 
 # ── Output targets ─────────────────────────────────────────────────────────────
@@ -50,9 +51,9 @@ rule process_sprof:
         manifest  = f"{DATA}/raw/download_manifest.csv",
         wmo_list  = f"{DATA}/raw/wmo_list.txt"
     params:
-        sprof_dir = RAW
+        sprof_dir  = RAW,
+        shared_dir = SHARED
     output:
-        out_dir  = directory(f"{DATA}/intermediate/doxy_profiles"),
         manifest = f"{DATA}/intermediate/doxy_profiles/processing_manifest.csv"
     script:
         "scripts/process_sprof.R"
@@ -62,9 +63,9 @@ rule process_cphyto:
         manifest  = f"{DATA}/raw/download_manifest.csv",
         wmo_list  = f"{DATA}/raw/wmo_list.txt"
     params:
-        sprof_dir = RAW
+        sprof_dir  = RAW,
+        shared_dir = SHARED
     output:
-        out_dir  = directory(f"{DATA}/intermediate/cphyto_profiles"),
         manifest = f"{DATA}/intermediate/cphyto_profiles/cphyto_manifest.csv"
     script:
         "scripts/process_cphyto.py"
@@ -72,7 +73,6 @@ rule process_cphyto:
 if config.get("compute_npp", False):
     rule download_par:
         input:
-            cphyto_dir = f"{DATA}/intermediate/cphyto_profiles",
             cphyto_manifest = f"{DATA}/intermediate/cphyto_profiles/cphyto_manifest.csv"
         params:
             par_dir = f"{RAW}/modis_par"
@@ -83,8 +83,8 @@ if config.get("compute_npp", False):
 
     rule match_par:
         input:
-            cphyto_dir   = f"{DATA}/intermediate/cphyto_profiles",
-            par_manifest = f"{DATA}/raw/par_download_manifest.csv"
+            cphyto_manifest = f"{DATA}/intermediate/cphyto_profiles/cphyto_manifest.csv",
+            par_manifest    = f"{DATA}/raw/par_download_manifest.csv"
         output:
             matched_csv = f"{DATA}/intermediate/par_matched/par_matched.csv"
         script:
@@ -92,7 +92,7 @@ if config.get("compute_npp", False):
 
     rule compute_npp:
         input:
-            cphyto_dir      = f"{DATA}/intermediate/cphyto_profiles",
+            cphyto_manifest = f"{DATA}/intermediate/cphyto_profiles/cphyto_manifest.csv",
             par_matched_csv = f"{DATA}/intermediate/par_matched/par_matched.csv"
         output:
             profiles_csv   = f"{DATA}/intermediate/npp/npp_profiles.csv",
@@ -130,10 +130,10 @@ if config.get("compute_npp", False):
 
 rule predict_nitrate:
     input:
-        in_dir   = f"{DATA}/intermediate/doxy_profiles",
         manifest = f"{DATA}/intermediate/doxy_profiles/processing_manifest.csv"
+    params:
+        shared_dir = SHARED
     output:
-        out_dir  = directory(f"{DATA}/intermediate/nitrate_profiles"),
         manifest = f"{DATA}/intermediate/nitrate_profiles/nitrate_manifest.csv"
     threads: workflow.cores
     script:
@@ -141,7 +141,6 @@ rule predict_nitrate:
 
 rule merge_floats:
     input:
-        in_dir   = f"{DATA}/intermediate/nitrate_profiles",
         manifest = f"{DATA}/intermediate/nitrate_profiles/nitrate_manifest.csv"
     output:
         merged_csv = f"{DATA}/intermediate/merged/merged_ncp.csv",

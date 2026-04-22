@@ -55,8 +55,9 @@ compute_ncp <- function(
     time_step,
     basin_poly,
     date_start, date_end,
-    zeu_default = 40,
-    label       = NULL
+    zeu_default    = 40,
+    label          = NULL,
+    mld_diag_path  = NULL
 ) {
 
   if (is.null(label)) label <- time_step
@@ -123,6 +124,32 @@ compute_ncp <- function(
     filter(date_grid %in% time_grid$date_grid) |>
     na.omit()
 
+  # ── MLD diagnostic plot (optional) ──────────────────────────────────────────
+  if (!is.null(mld_diag_path)) {
+    dat_prof_plot <- dat_prof |>
+      mutate(date_grid = as.Date(cut(date, breaks = time_step)))
+    p_mld <- ggplot() +
+      geom_point(data = dat_prof_plot,
+                 aes(x = date, y = MLD, color = factor(float_wmo)),
+                 alpha = 0.5, size = 1.2, show.legend = TRUE) +
+      geom_line(data = prof_dat_smoothed |> filter(!is.na(mld)),
+                aes(x = date_grid, y = mld),
+                color = "black", linewidth = 1.2, linetype = "solid") +
+      geom_point(data = prof_dat_smoothed |> filter(!is.na(mld)),
+                 aes(x = date_grid, y = mld),
+                 color = "black", size = 2.5, shape = 21, fill = "white") +
+      scale_y_reverse() +
+      scale_x_date(date_labels = "%b %Y", breaks = "3 months") +
+      labs(x = "Date", y = "MLD (m)",
+           title = paste0(basin_name, " — MLD: individual profiles vs bin average (", time_step, ")"),
+           color = "Float WMO") +
+      theme_bw() +
+      theme(legend.position = "bottom",
+            legend.text = element_text(size = 7))
+    ggsave(mld_diag_path, p_mld, width = 11, height = 5, dpi = 150)
+    message("MLD diagnostic plot saved -> ", mld_diag_path)
+  }
+
   # nitrate interpolation
   dat_smoothed <- dat |>
     mutate(date_grid = as.Date(cut(date, breaks = time_step))) |>
@@ -176,15 +203,17 @@ compute_ncp <- function(
 message("Running NCP for basin: ", basin_name)
 message("Time steps: ", paste(time_steps, collapse = ", "))
 
-all_results <- map(time_steps, function(ts) {
+all_results <- map(seq_along(time_steps), function(i) {
+  ts <- time_steps[[i]]
   tryCatch(
     compute_ncp(
-      dat             = dat,
-      time_step       = ts,
-      basin_poly      = basin_poly,
-      date_start      = date_start, date_end = date_end,
-      zeu_default = zeu_default,
-      label       = ts
+      dat            = dat,
+      time_step      = ts,
+      basin_poly     = basin_poly,
+      date_start     = date_start, date_end = date_end,
+      zeu_default    = zeu_default,
+      label          = ts,
+      mld_diag_path  = if (i == 1L) file.path(out_dir, "mld_timeseries.png") else NULL
     ),
     error = function(e) { message("Failed for ", ts, ": ", e$message); NULL }
   )

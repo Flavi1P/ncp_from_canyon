@@ -37,10 +37,11 @@ def _bbox_from_config(cfg) -> tuple[float, float, float, float]:
     return cfg["lon_min"], cfg["lon_max"], cfg["lat_min"], cfg["lat_max"]
 
 
-def _unique_dates_from_cphyto(cphyto_dir: Path) -> list[str]:
+def _unique_dates_from_cphyto(cphyto_manifest: Path) -> list[str]:
+    manifest = pd.read_csv(cphyto_manifest)
     dates: set[date] = set()
-    for csv in cphyto_dir.glob("argo_*_cphyto.csv"):
-        dates.update(pd.read_csv(csv, usecols=["date"], parse_dates=["date"])["date"].dt.date.unique())
+    for csv_path in manifest["path"]:
+        dates.update(pd.read_csv(csv_path, usecols=["date"], parse_dates=["date"])["date"].dt.date.unique())
     return sorted(d.isoformat() for d in dates)
 
 
@@ -61,15 +62,15 @@ def _subset_and_save(src_obj, out_path: Path,
 
 
 def download_par(
-    cphyto_dir:    Path,
-    par_dir:       Path,
-    manifest_path: Path,
-    bbox:          tuple[float, float, float, float],
-    resolution_km: int = 9,
+    cphyto_manifest: Path,
+    par_dir:         Path,
+    manifest_path:   Path,
+    bbox:            tuple[float, float, float, float],
+    resolution_km:   int = 9,
 ) -> None:
-    cphyto_dir    = Path(cphyto_dir)
-    par_dir       = Path(par_dir)
-    manifest_path = Path(manifest_path)
+    cphyto_manifest = Path(cphyto_manifest)
+    par_dir         = Path(par_dir)
+    manifest_path   = Path(manifest_path)
     par_dir.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -78,8 +79,8 @@ def download_par(
     lat_min -= BBOX_PAD; lat_max += BBOX_PAD
     print(f"Bbox subset: lon [{lon_min:.2f}, {lon_max:.2f}], lat [{lat_min:.2f}, {lat_max:.2f}]")
 
-    dates = _unique_dates_from_cphyto(cphyto_dir)
-    print(f"Found {len(dates)} unique profile dates in {cphyto_dir}")
+    dates = _unique_dates_from_cphyto(cphyto_manifest)
+    print(f"Found {len(dates)} unique profile dates in {cphyto_manifest}")
     if not dates:
         pd.DataFrame(columns=["date", "filename", "path"]).to_csv(manifest_path, index=False)
         return
@@ -133,11 +134,11 @@ def _snakemake_main():
     log_path = Path("data") / "_download_par_error.log"
     try:
         download_par(
-            cphyto_dir    = Path(snakemake.input["cphyto_dir"]),               # noqa: F821
-            par_dir       = Path(snakemake.params["par_dir"]),                 # noqa: F821
-            manifest_path = Path(snakemake.output["manifest"]),                # noqa: F821
-            bbox          = _bbox_from_config(snakemake.config),               # noqa: F821
-            resolution_km = int(snakemake.config.get("par_resolution_km", 9)), # noqa: F821
+            cphyto_manifest = Path(snakemake.input["cphyto_manifest"]),         # noqa: F821
+            par_dir         = Path(snakemake.params["par_dir"]),                # noqa: F821
+            manifest_path   = Path(snakemake.output["manifest"]),               # noqa: F821
+            bbox            = _bbox_from_config(snakemake.config),              # noqa: F821
+            resolution_km   = int(snakemake.config.get("par_resolution_km", 9)), # noqa: F821
         )
     except Exception:
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -151,11 +152,11 @@ if __name__ == "__main__":
     else:
         import yaml
         args = sys.argv[1:]
-        cfg_path   = Path(args[0]) if len(args) > 0 else Path("config.yaml")
-        cphyto_dir = Path(args[1]) if len(args) > 1 else Path("data/NorthAtlantic_seas_comparison/intermediate/cphyto_profiles")
-        par_dir    = Path(args[2]) if len(args) > 2 else Path("data/raw/modis_par")
-        manifest   = Path(args[3]) if len(args) > 3 else Path("data/NorthAtlantic_seas_comparison/raw/par_download_manifest.csv")
+        cfg_path        = Path(args[0]) if len(args) > 0 else Path("config.yaml")
+        cphyto_manifest = Path(args[1]) if len(args) > 1 else Path("data/NorthAtlantic_seas_comparison/intermediate/cphyto_profiles/cphyto_manifest.csv")
+        par_dir         = Path(args[2]) if len(args) > 2 else Path("data/raw/modis_par")
+        manifest        = Path(args[3]) if len(args) > 3 else Path("data/NorthAtlantic_seas_comparison/raw/par_download_manifest.csv")
         cfg = yaml.safe_load(cfg_path.read_text())
-        download_par(cphyto_dir, par_dir, manifest,
+        download_par(cphyto_manifest, par_dir, manifest,
                      bbox=_bbox_from_config(cfg),
                      resolution_km=int(cfg.get("par_resolution_km", 9)))

@@ -1,6 +1,7 @@
 run_name:   "NorthAtlantic_seas_comparison"
 data_dir:   "data"
 raw_dir:    "data/raw"
+shared_dir: "data/shared"
 output_dir: "output"
 
 # Spatial extent -- named basins defined as lon/lat polygon vertices
@@ -29,13 +30,21 @@ basins:
       - [-52.8, 62.5]
       - [-60.4, 60.4]
       - [-50.5, 53.8]
+  
+  NorwegianSea:
+    polygon:
+      - [3, 62]
+      - [8.5, 70]
+      - [-8.2, 70]
+      - [-11, 60.4]
+      - [3, 62]
 
 # Temporal extent
 date_start: "2020-01-01"
 date_end:   "2026-01-01"
 
 # NCP parameters
-ncp_time_steps: ["15 days"]
+ncp_time_steps: ["15 days", "20 days", "30 days"]
 zeu_default:    40
 
 # Uncertainty estimation
