@@ -101,10 +101,16 @@ for (file in files) {
     group_by(lon, lat, date) %>%
     mutate(across(
       c(oxygen, temp, sal),
-      ~ if (sum(!is.na(.x)) > 10) {
-          na.approx(.x, x = depth, na.rm = FALSE, rule = 2)
-        } else {
-          rep(NA_real_, length(.x))
+      ~ {
+          vals <- .x
+          if (sum(!is.na(vals)) > 10) {
+            tryCatch(
+              na.approx(vals, x = depth, na.rm = FALSE, rule = 2),
+              error = function(e) rep(NA_real_, length(vals))
+            )
+          } else {
+            rep(NA_real_, length(vals))
+          }
         }
     )) %>%
     ungroup() |>

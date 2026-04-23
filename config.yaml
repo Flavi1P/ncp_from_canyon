@@ -38,9 +38,25 @@ basins:
       - [-8.2, 70]
       - [-11, 60.4]
       - [3, 62]
+  
+  NorthAtlantic:
+    polygon:
+      - [-45, 55]
+      - [-48, 43]
+      - [-13, 43]
+      - [-14, 55]
+      - [-45, 55]
+  
+  WesternMediterranean:
+    polygon:
+      - [-1.5, 36]
+      - [15, 38]
+      - [10.5, 44.4]
+      - [-2, 42]
+      - [-1.5, 36]
 
 # Temporal extent
-date_start: "2020-01-01"
+date_start: "2015-01-01"
 date_end:   "2026-01-01"
 
 # NCP parameters
@@ -55,6 +71,6 @@ ncp_method: "o2_budget"
 
 # NPP estimation (CbPM). Set to false to skip all NPP-related steps (PAR
 # download, match, compute_npp, NPP plots). NCP pipeline is unaffected.
-compute_npp: true
+compute_npp: false
 # NPP inputs — MODIS-Aqua L3m PAR resolution ('9' or '4' km)
 par_resolution_km: 9

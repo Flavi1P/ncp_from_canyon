@@ -85,45 +85,54 @@ def download_par(
         pd.DataFrame(columns=["date", "filename", "path"]).to_csv(manifest_path, index=False)
         return
 
-    # Force netrc strategy — the default 'all' strategy tries interactive prompts
-    # first, which hangs/fails under Snakemake (no TTY).
-    earthaccess.login(strategy="netrc")
+    res_str = f"{resolution_km}km"
+    pattern = f"*.DAY.PAR.par.{res_str}.nc"
 
-    pattern = f"*.DAY.PAR.par.{resolution_km}km.nc"
+    # Pre-scan: split into already-cached and genuinely missing
     rows = []
-    for i, d in enumerate(dates, 1):
-        expected_name = f"AQUA_MODIS.{d.replace('-', '')}.L3m.DAY.PAR.par.{resolution_km}km.subset.nc"
+    missing = []   # list of (date_str, expected_name, out_path)
+    for d in dates:
+        expected_name = f"AQUA_MODIS.{d.replace('-', '')}.L3m.DAY.PAR.par.{res_str}.subset.nc"
         out_path = par_dir / expected_name
         if out_path.exists():
-            print(f"  [{i}/{len(dates)}] {expected_name}: cached")
-            rows.append({"date": d, "filename": expected_name, "path": str(out_path)})
-            continue
-
-        try:
-            granules = earthaccess.search_data(
-                short_name=SHORT_NAME, version=VERSION,
-                temporal=(d, d), granule_name=pattern,
-            )
-        except Exception as e:
-            print(f"  [{i}/{len(dates)}] {d}: SEARCH FAILED ({e})")
-            continue
-        if not granules:
-            print(f"  [{i}/{len(dates)}] {d}: no granule found")
-            continue
-
-        try:
-            file_objs = earthaccess.open(granules)
-            ok = _subset_and_save(file_objs[0], out_path,
-                                  lon_min, lon_max, lat_min, lat_max)
-        except Exception as e:
-            print(f"  [{i}/{len(dates)}] {d}: OPEN/SUBSET FAILED ({e})")
-            continue
-
-        if ok and out_path.exists():
-            print(f"  [{i}/{len(dates)}] {expected_name}: saved ({out_path.stat().st_size/1024:.0f} kB)")
             rows.append({"date": d, "filename": expected_name, "path": str(out_path)})
         else:
-            print(f"  [{i}/{len(dates)}] {d}: bbox empty — skipped")
+            missing.append((d, expected_name, out_path))
+
+    print(f"{len(rows)}/{len(dates)} dates already cached, {len(missing)} to download")
+
+    # Only authenticate + search when there are files to fetch
+    if missing:
+        # Force netrc strategy — the default 'all' strategy tries interactive prompts
+        # first, which hangs/fails under Snakemake (no TTY).
+        earthaccess.login(strategy="netrc")
+
+        for i, (d, expected_name, out_path) in enumerate(missing, 1):
+            try:
+                granules = earthaccess.search_data(
+                    short_name=SHORT_NAME, version=VERSION,
+                    temporal=(d, d), granule_name=pattern,
+                )
+            except Exception as e:
+                print(f"  [{i}/{len(missing)}] {d}: SEARCH FAILED ({e})")
+                continue
+            if not granules:
+                print(f"  [{i}/{len(missing)}] {d}: no granule found")
+                continue
+
+            try:
+                file_objs = earthaccess.open(granules)
+                ok = _subset_and_save(file_objs[0], out_path,
+                                      lon_min, lon_max, lat_min, lat_max)
+            except Exception as e:
+                print(f"  [{i}/{len(missing)}] {d}: OPEN/SUBSET FAILED ({e})")
+                continue
+
+            if ok and out_path.exists():
+                print(f"  [{i}/{len(missing)}] {expected_name}: saved ({out_path.stat().st_size/1024:.0f} kB)")
+                rows.append({"date": d, "filename": expected_name, "path": str(out_path)})
+            else:
+                print(f"  [{i}/{len(missing)}] {d}: bbox empty — skipped")
 
     pd.DataFrame(rows).to_csv(manifest_path, index=False)
     print(f"Manifest -> {manifest_path}  ({len(rows)}/{len(dates)} files available)")
