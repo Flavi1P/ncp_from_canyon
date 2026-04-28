@@ -1,0 +1,69 @@
+run_name:   "Single_float_test"
+data_dir:   "data"
+raw_dir:    "data/raw"
+shared_dir: "data/shared"
+output_dir: "output"
+
+# Spatial extent -- named basins defined as lon/lat polygon vertices
+# Each polygon should be a closed or open ring; closing vertex is added automatically.
+# Iceland Basin: east of the Reykjanes Ridge, bounded by the Mid-Atlantic Ridge to the west
+# Irminger Sea:  west of the Reykjanes Ridge, bounded by Greenland to the northwest
+basins:
+  AtlanticSAZ_PFZ:
+    polygon:
+      - [-60, -45]
+      - [0, -45]
+      - [0, -55]
+      - [-60, -55]
+      - [-60, -45]
+  AtlanticSubtropical:
+    polygon:
+      - [-60, -35]
+      - [0, -35]
+      - [0, -45]
+      - [-60, -45]
+      - [-60, -35]
+  IndianKerguelen:
+    polygon:
+      - [50, -45]
+      - [110, -45]
+      - [110, -55]
+      - [50, -55]
+      - [50, -45]
+# Temporal extent
+date_start: "2013-01-01"
+date_end:   "2026-01-01"
+
+# NCP parameters
+ncp_time_steps: ["10 days", "20 days", "30 days"]
+zeu_default:    40
+
+# Uncertainty estimation
+uncertainty: true
+n_mc:        100
+
+ncp_method: "o2_budget"
+
+# Single-float NCP mode — list WMOs to process individually.
+# Each float is processed without spatial filtering.
+# Omit or leave empty to skip.
+floats:
+    - 5904845
+    - 5906206
+    - 5905099
+
+# Time window for single-float NCP binning.
+# Profiles within each window are averaged (MLD, nitrate) before NCP is computed.
+# Set to null (or omit) to use consecutive-profile mode (one NCP per profile pair).
+float_time_window: "15 days"
+
+# MLD method for NCP integration depth
+# "average":    always use bin-mean MLD
+# "winter_max": use bin-max MLD when mean MLD > 100 m, bin-mean otherwise
+mld_method: "winter_max"
+
+# NPP estimation (CbPM). Set to false to skip all NPP-related steps (PAR
+# download, match, compute_npp, NPP plots). NCP pipeline is unaffected.
+compute_npp: false
+# NPP inputs — MODIS-Aqua L3m PAR resolution ('9' or '4' km)
+par_resolution_km: 9

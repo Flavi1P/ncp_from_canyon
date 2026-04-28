@@ -1,4 +1,4 @@
-configfile: "config.yaml"
+configfile: "config_so.yaml"
 
 RUN    = config["run_name"]
 DATA   = f"{config['data_dir']}/{RUN}"

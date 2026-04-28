@@ -1,0 +1,4 @@
+Summary plots generated 2026-04-28 08:28:36.578884
+Basins: AtlanticSAZ_PFZ, AtlanticSubtropical, IndianKerguelen
+Floats: 5904845, 5906206, 5905099
+Reference timestep: 30 days
