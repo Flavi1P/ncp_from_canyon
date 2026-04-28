@@ -22,7 +22,8 @@ if config.get("uncertainty", False):
     _all_outputs += (
         expand(_unc_csv, basin=BASINS) +
         expand(_unc_png, basin=BASINS) +
-        [f"{OUT}/ncp/basins_comparison.png"]
+        [f"{OUT}/ncp/basins_comparison.png",
+         f"{OUT}/summary/_done.txt"]
     )
 if FLOATS:
     _float_ncp_csv      = f"{OUT}/ncp_float/{{wmo}}/ncp_float.csv"
@@ -207,6 +208,21 @@ if config.get("uncertainty", False):
             fig = f"{OUT}/ncp/basins_comparison.png"
         script:
             "scripts/compare_basins.R"
+
+    rule summary_plots:
+        input:
+            basin_unc_csvs = expand(_unc_csv, basin=BASINS),
+            basin_res_csvs = expand(_ncp_csv, basin=BASINS),
+            float_csvs     = (expand(f"{OUT}/ncp_float/{{wmo}}/ncp_float.csv",
+                                     wmo=FLOATS) if FLOATS else [])
+        params:
+            basin_names = BASINS,
+            float_wmos  = FLOATS
+        output:
+            out_dir = directory(f"{OUT}/summary"),
+            marker  = f"{OUT}/summary/_done.txt"
+        script:
+            "scripts/summary_plots.R"
 
 # ── Per-float NCP rules ────────────────────────────────────────────────────────
 if FLOATS:
