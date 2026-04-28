@@ -67,26 +67,34 @@ process_float <- function(file, shared_nitrate_dir, weights, utils_dir) {
     return(NULL)
   }
 
-  tryCatch({
-    nitrate <- CANYONB_fast(
-      date         = dat$date,
-      lat          = dat$lat,
-      lon          = dat$lon,
-      pres         = dat$depth,
-      temp         = dat$temp,
-      psal         = dat$sal,
-      doxy         = dat$oxygen,
-      wgts_list    = weights,
-      use_parallel = FALSE,   # within-float parallelism via mclapply does not work on Windows
-      param        = "NO3"
-    )
-    dat$canyon_nitrate    <- nitrate$NO3
-    dat$canyon_nitrate_ci <- nitrate$NO3_ci
-  }, error = function(e) {
-    message("CANYON-B failed for ", basename(file), ": ", e$message)
-    dat$canyon_nitrate    <<- NA_real_
-    dat$canyon_nitrate_ci <<- NA_real_
-  })
+  # Pre-initialise to NA; only run CANYON-B on rows with valid position
+  dat$canyon_nitrate    <- NA_real_
+  dat$canyon_nitrate_ci <- NA_real_
+
+  valid_pos <- !is.na(dat$lat) & !is.na(dat$lon)
+  if (sum(valid_pos) >= 10) {
+    dat_valid <- dat[valid_pos, ]
+    tryCatch({
+      nitrate <- CANYONB_fast(
+        date         = dat_valid$date,
+        lat          = dat_valid$lat,
+        lon          = dat_valid$lon,
+        pres         = dat_valid$depth,
+        temp         = dat_valid$temp,
+        psal         = dat_valid$sal,
+        doxy         = dat_valid$oxygen,
+        wgts_list    = weights,
+        use_parallel = FALSE,
+        param        = "NO3"
+      )
+      dat$canyon_nitrate[valid_pos]    <- nitrate$NO3
+      dat$canyon_nitrate_ci[valid_pos] <- nitrate$NO3_ci
+    }, error = function(e) {
+      message("CANYON-B failed for ", basename(file), ": ", e$message)
+    })
+  } else {
+    message("Skipping CANYON-B for ", basename(file), " -- insufficient valid positions.")
+  }
 
   tryCatch({
     readr::write_csv(dat, out_path)
