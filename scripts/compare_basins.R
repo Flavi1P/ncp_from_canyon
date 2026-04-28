@@ -20,6 +20,7 @@ dat <- map2_dfr(csv_files, basin_names, function(f, bn) {
 })
 
 message("Loaded ", nrow(dat), " rows across ", n_distinct(dat$basin), " basins")
+dat <- dat |> filter(!is.na(NCP_mean))
 
 # ── One panel per time step, basins overlaid ──────────────────────────────────
 p <- ggplot(dat, aes(x = date_grid, color = basin, fill = basin)) +
@@ -41,6 +42,6 @@ p <- ggplot(dat, aes(x = date_grid, color = basin, fill = basin)) +
 
 ggsave(out_fig, p,
        width  = 12,
-       height = 4 * n_distinct(dat$time_step_label),
+       height = max(4, 4 * n_distinct(dat$time_step_label)),
        dpi    = 150)
 message("Basin comparison figure saved -> ", out_fig)

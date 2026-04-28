@@ -1,6 +1,7 @@
 library(tidyverse)
 library(zoo)
 library(sf)
+library(data.table)
 
 # ── Snakemake / CLI input handling ────────────────────────────────────────────
 if (exists("snakemake")) {
@@ -12,6 +13,7 @@ if (exists("snakemake")) {
   date_start      <- snakemake@config[["date_start"]]
   date_end        <- snakemake@config[["date_end"]]
   zeu_default     <- snakemake@config[["zeu_default"]]
+  mld_method      <- snakemake@config[["mld_method"]]
 } else {
   args          <- commandArgs(trailingOnly = TRUE)
   merged_csv    <- ifelse(length(args) > 0, args[1],
@@ -24,6 +26,7 @@ if (exists("snakemake")) {
   date_start      <- "2020-01-01"
   date_end        <- "2026-01-01"
   zeu_default     <- 40
+  mld_method      <- "average"
 }
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
@@ -37,14 +40,35 @@ make_basin_polygon <- function(poly_verts) {
 }
 
 basin_poly <- make_basin_polygon(basin_polygon)
+bbox       <- st_bbox(basin_poly)
 
-message("Reading merged data from ", merged_csv)
-dat <- read_csv(merged_csv, show_col_types = FALSE)
-message("Loaded ", nrow(dat), " rows")
+# Streaming read: only pull needed columns, then bbox-filter immediately so we
+# never hold the full ~15GB merged CSV in memory.
+needed_cols <- c("float_wmo","prof_number","date","lon","lat",
+                 "MLD","depth","canyon_nitrate")
+message("Reading merged data from ", merged_csv, " (cols: ",
+        paste(needed_cols, collapse = ", "), ")")
+dat_dt <- fread(merged_csv, select = needed_cols, showProgress = FALSE)
+message("Loaded ", nrow(dat_dt), " rows; bbox-filtering...")
+dat_dt <- dat_dt[lon >= bbox[["xmin"]] & lon <= bbox[["xmax"]] &
+                 lat >= bbox[["ymin"]] & lat <= bbox[["ymax"]]]
+message(nrow(dat_dt), " rows in basin bbox")
+
+# Exact polygon filter (once, at load — avoids 3× repeated st_within inside
+# compute_ncp).
+if (nrow(dat_dt) > 0) {
+  dat_sf   <- st_as_sf(dat_dt, coords = c("lon","lat"), crs = 4326, remove = FALSE)
+  in_basin <- lengths(st_within(dat_sf, basin_poly)) > 0
+  dat_dt   <- dat_dt[in_basin]
+  rm(dat_sf, in_basin); gc(verbose = FALSE)
+}
+dat <- as_tibble(dat_dt) |> mutate(date = as.Date(date))
+rm(dat_dt); gc(verbose = FALSE)
+message(nrow(dat), " rows in basin polygon")
 
 # ── Integration helper ────────────────────────────────────────────────────────
 integrate_nitrate <- function(nitrate, depth, from, to) {
-  idx <- depth >= from & depth <= to
+  idx <- depth >= from & depth <= to & !is.na(nitrate)
   if (sum(idx) < 2) return(NA_real_)
   mean(approxfun(depth[idx], nitrate[idx])(seq(from, to, by = 1)), na.rm = TRUE) * (to - from)
 }
@@ -56,25 +80,18 @@ compute_ncp <- function(
     basin_poly,
     date_start, date_end,
     zeu_default    = 40,
+    mld_method     = "average",
     label          = NULL,
     mld_diag_path  = NULL
 ) {
 
   if (is.null(label)) label <- time_step
 
-  # fast bbox pre-filter before expensive st_within
-  bbox     <- st_bbox(basin_poly)
-  dat <- dat |> filter(lon >= bbox["xmin"], lon <= bbox["xmax"],
-                       lat >= bbox["ymin"], lat <= bbox["ymax"])
-
-  # exact polygon filter
-  dat_sf   <- st_as_sf(dat, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
-  in_basin <- lengths(st_within(dat_sf, basin_poly)) > 0
-  dat <- dat[in_basin, ] |>
-    filter(
-      date > as.Date(date_start),
-      date < as.Date(date_end)
-    ) |>
+  # dat is already bbox- and polygon-filtered at load time; just apply date
+  # window and add zeu here.
+  dat <- dat |>
+    filter(date > as.Date(date_start),
+           date < as.Date(date_end)) |>
     mutate(zeu = zeu_default)
 
   if (nrow(dat) == 0) stop("No data after filtering for: ", label)
@@ -86,18 +103,42 @@ compute_ncp <- function(
     distinct() |>
     filter(!is.na(MLD), !is.na(zeu))
 
+  # IQR outlier detection on per-profile MLD (1.5 × IQR rule)
+  mld_q1  <- quantile(dat_prof$MLD, 0.25, na.rm = TRUE)
+  mld_q3  <- quantile(dat_prof$MLD, 0.75, na.rm = TRUE)
+  mld_iqr <- mld_q3 - mld_q1
+  dat_prof <- dat_prof |>
+    mutate(mld_outlier = MLD < (mld_q1 - 1.5 * mld_iqr) |
+                         MLD > (mld_q3 + 1.5 * mld_iqr))
+
+  n_outliers <- sum(dat_prof$mld_outlier)
+  if (n_outliers > 0)
+    message(label, ": removing ", n_outliers, " MLD outlier profile(s) ",
+            "(IQR fence [", round(mld_q1 - 1.5 * mld_iqr, 1), ", ",
+            round(mld_q3 + 1.5 * mld_iqr, 1), "] m)")
+
+  dat_prof_clean <- dat_prof |> filter(!mld_outlier)
+
   # time grid
   time_grid <- tibble(
-    date_grid = seq(min(dat_prof$date), max(dat_prof$date), by = time_step)
+    date_grid = seq(min(dat_prof_clean$date), max(dat_prof_clean$date), by = time_step)
   )
 
-  # integration depth — bin-average MLD and Zeu per time step
-  prof_dat_smoothed <- dat_prof |>
+  # integration depth — bin MLD per time step.
+  # mld_method = "average":    always use bin mean MLD
+  # mld_method = "winter_max": use bin max when mean MLD > 100 m (deep winter),
+  #                            bin mean otherwise
+  prof_dat_smoothed <- dat_prof_clean |>
     mutate(date_grid = as.Date(cut(date, breaks = time_step))) |>
     group_by(date_grid) |>
-    summarise(mld = mean(MLD, na.rm = TRUE),
-              zeu = mean(zeu, na.rm = TRUE),
-              .groups = "drop") |>
+    summarise(mld_mean = mean(MLD, na.rm = TRUE),
+              mld_max  = max(MLD,  na.rm = TRUE),
+              zeu      = mean(zeu, na.rm = TRUE),
+              .groups  = "drop") |>
+    mutate(mld = case_when(
+      mld_method == "winter_max" & mld_mean > 100 ~ mld_max,
+      TRUE ~ mld_mean
+    )) |>
     mutate(
       prev_MLD               = lag(mld),
       prev_zeu               = lag(zeu),
@@ -128,24 +169,29 @@ compute_ncp <- function(
   if (!is.null(mld_diag_path)) {
     dat_prof_plot <- dat_prof |>
       mutate(date_grid = as.Date(cut(date, breaks = time_step)))
+    smoothed_plot <- prof_dat_smoothed |> filter(!is.na(mld))
     p_mld <- ggplot() +
-      geom_point(data = dat_prof_plot,
-                 aes(x = date, y = MLD, color = factor(float_wmo)),
-                 alpha = 0.5, size = 1.2, show.legend = TRUE) +
-      geom_line(data = prof_dat_smoothed |> filter(!is.na(mld)),
+      geom_point(data = filter(dat_prof_plot, !mld_outlier),
+                 aes(x = date, y = MLD),
+                 color = "steelblue", alpha = 0.4, size = 1.2) +
+      geom_point(data = filter(dat_prof_plot, mld_outlier),
+                 aes(x = date, y = MLD),
+                 color = "#e31a1c", shape = 4, size = 2.5, stroke = 1.2) +
+      geom_line(data = smoothed_plot,
                 aes(x = date_grid, y = mld),
-                color = "black", linewidth = 1.2, linetype = "solid") +
-      geom_point(data = prof_dat_smoothed |> filter(!is.na(mld)),
-                 aes(x = date_grid, y = mld),
-                 color = "black", size = 2.5, shape = 21, fill = "white") +
+                color = "black", linewidth = 1.2) +
+      geom_point(data = smoothed_plot,
+                 aes(x = date_grid, y = mld,
+                     fill = if_else(mld_mean > 100, "max", "mean")),
+                 color = "black", size = 2.5, shape = 21) +
+      scale_fill_manual(values = c(max = "#ff7f00", mean = "white"),
+                        name = "Bin MLD") +
       scale_y_reverse() +
       scale_x_date(date_labels = "%b %Y", breaks = "3 months") +
       labs(x = "Date", y = "MLD (m)",
-           title = paste0(basin_name, " — MLD: individual profiles vs bin average (", time_step, ")"),
-           color = "Float WMO") +
+           title = paste0(basin_name, " — MLD (× = outlier removed, orange bin = winter-max used)")) +
       theme_bw() +
-      theme(legend.position = "bottom",
-            legend.text = element_text(size = 7))
+      theme(legend.position = "bottom")
     ggsave(mld_diag_path, p_mld, width = 11, height = 5, dpi = 150)
     message("MLD diagnostic plot saved -> ", mld_diag_path)
   }
@@ -212,6 +258,7 @@ all_results <- map(seq_along(time_steps), function(i) {
       basin_poly     = basin_poly,
       date_start     = date_start, date_end = date_end,
       zeu_default    = zeu_default,
+      mld_method     = mld_method,
       label          = ts,
       mld_diag_path  = if (i == 1L) file.path(out_dir, "mld_timeseries.png") else NULL
     ),
@@ -223,18 +270,35 @@ all_results <- map(seq_along(time_steps), function(i) {
 
 # ── Save results ──────────────────────────────────────────────────────────────
 results_csv <- file.path(out_dir, "ncp_results.csv")
-write_csv(all_results, results_csv)
-message("NCP results saved -> ", results_csv)
 
-# ── Plots ─────────────────────────────────────────────────────────────────────
-p_sensitivity <- ggplot(all_results) +
-  geom_line(aes(x = date_grid, y = NCP, color = time_step_label)) +
-  scale_color_brewer(palette = "Set1", name = "Time step") +
-  labs(y = "mmol C m-2 d-1", x = "Date",
-       title = paste0("NCP sensitivity to time step -- ", basin_name)) +
-  theme_bw() +
-  scale_x_date(date_labels = "%b %Y", breaks = "6 months")
+if (nrow(all_results) == 0) {
+  message("No float data found in basin '", basin_name, "' — writing empty outputs.")
+  write_csv(
+    tibble(date_grid = as.Date(character(0)), mld = numeric(0), zeu = numeric(0),
+           NCP = numeric(0), time_step_label = character(0)),
+    results_csv
+  )
+  p_empty <- ggplot() +
+    annotate("text", x = 0.5, y = 0.5,
+             label = paste0("No data for basin: ", basin_name),
+             size = 6, hjust = 0.5, vjust = 0.5) +
+    theme_void()
+  ggsave(file.path(out_dir, "ncp_sensitivity.png"), p_empty,
+         width = 10, height = 5, dpi = 150)
+  message("Empty outputs written for basin: ", basin_name)
+} else {
+  write_csv(all_results, results_csv)
+  message("NCP results saved -> ", results_csv)
 
-ggsave(file.path(out_dir, "ncp_sensitivity.png"), p_sensitivity,
-       width = 10, height = 5, dpi = 150)
-message("Sensitivity plot saved -> ", file.path(out_dir, "ncp_sensitivity.png"))
+  p_sensitivity <- ggplot(all_results) +
+    geom_line(aes(x = date_grid, y = NCP, color = time_step_label)) +
+    scale_color_brewer(palette = "Set1", name = "Time step") +
+    labs(y = "mmol C m-2 d-1", x = "Date",
+         title = paste0("NCP sensitivity to time step -- ", basin_name)) +
+    theme_bw() +
+    scale_x_date(date_labels = "%b %Y", breaks = "6 months")
+
+  ggsave(file.path(out_dir, "ncp_sensitivity.png"), p_sensitivity,
+         width = 10, height = 5, dpi = 150)
+  message("Sensitivity plot saved -> ", file.path(out_dir, "ncp_sensitivity.png"))
+}

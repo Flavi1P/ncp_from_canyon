@@ -171,8 +171,9 @@ rule compute_ncp:
         out_dir         = directory(f"{OUT}/ncp/{{basin}}"),
         ncp_results     = f"{OUT}/ncp/{{basin}}/ncp_results.csv",
         sensitivity_png = f"{OUT}/ncp/{{basin}}/ncp_sensitivity.png"
+    threads: workflow.cores
     resources:
-        mem_mb = 8000
+        mem_mb = 16000
     wildcard_constraints:
         basin = "|".join(BASINS)
     script:
@@ -189,8 +190,9 @@ if config.get("uncertainty", False):
         output:
             results_csv = f"{OUT}/ncp/{{basin}}/ncp_uncertainty.csv",
             plot_png    = f"{OUT}/ncp/{{basin}}/ncp_uncertainty.png"
+        threads: workflow.cores
         resources:
-            mem_mb = 8000
+            mem_mb = 16000
         wildcard_constraints:
             basin = "|".join(BASINS)
         script:
