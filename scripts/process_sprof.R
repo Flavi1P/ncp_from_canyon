@@ -7,15 +7,17 @@ library(readr)
 
 # ── Snakemake / CLI input handling ────────────────────────────────────────────
 if (exists("snakemake")) {
-  sprof_dir     <- snakemake@params[["sprof_dir"]]
-  shared_dir    <- snakemake@params[["shared_dir"]]
-  manifest_path <- snakemake@output[["manifest"]]
+  sprof_dir            <- snakemake@params[["sprof_dir"]]
+  shared_dir           <- snakemake@params[["shared_dir"]]
+  download_manifest_path <- snakemake@input[["manifest"]]
+  manifest_path        <- snakemake@output[["manifest"]]
 } else {
-  args          <- commandArgs(trailingOnly = TRUE)
-  sprof_dir     <- ifelse(length(args) > 0, args[1], "data/raw")
-  shared_dir    <- ifelse(length(args) > 1, args[2], "data/shared")
-  manifest_path <- ifelse(length(args) > 2, args[3],
-                          "data/NorthAtlantic_seas_comparison/intermediate/doxy_profiles/processing_manifest.csv")
+  args                   <- commandArgs(trailingOnly = TRUE)
+  sprof_dir              <- ifelse(length(args) > 0, args[1], "data/raw")
+  shared_dir             <- ifelse(length(args) > 1, args[2], "data/shared")
+  download_manifest_path <- ifelse(length(args) > 2, args[3], NULL)
+  manifest_path          <- ifelse(length(args) > 3, args[4],
+                            "data/NorthAtlantic_seas_comparison/intermediate/doxy_profiles/processing_manifest.csv")
 }
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
@@ -23,8 +25,17 @@ shared_doxy_dir <- file.path(shared_dir, "doxy_profiles")
 dir.create(shared_doxy_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(dirname(manifest_path), recursive = TRUE, showWarnings = FALSE)
 
-files <- list.files(sprof_dir, pattern = "_Sprof.nc", full.names = TRUE)
-message("Found ", length(files), " Sprof files in ", sprof_dir)
+# Build file list from the download manifest so only this run's floats are processed
+if (!is.null(download_manifest_path) && file.exists(download_manifest_path)) {
+  dl_df <- readr::read_csv(download_manifest_path, show_col_types = FALSE)
+  files <- file.path(sprof_dir, paste0(dl_df$wmo, "_Sprof.nc"))
+  files <- files[file.exists(files)]
+  run_wmos <- dl_df$wmo
+} else {
+  files    <- list.files(sprof_dir, pattern = "_Sprof.nc", full.names = TRUE)
+  run_wmos <- NULL
+}
+message("Found ", length(files), " Sprof files for this run")
 
 pb <- txtProgressBar(min = 0, max = length(files), style = 3)
 i  <- 0
@@ -130,11 +141,16 @@ for (file in files) {
 close(pb)
 message("Done. Processed ", i, " floats.")
 
-# Write manifest pointing to all shared files
-shared_files <- list.files(shared_doxy_dir, pattern = "_interp\\.csv$", full.names = TRUE)
+# Write manifest: only include this run's WMOs (files live in shared dir)
+if (!is.null(run_wmos)) {
+  run_paths <- file.path(shared_doxy_dir, paste0("argo_", run_wmos, "_interp.csv"))
+  run_paths <- run_paths[file.exists(run_paths)]
+} else {
+  run_paths <- list.files(shared_doxy_dir, pattern = "_interp\\.csv$", full.names = TRUE)
+}
 manifest <- data.frame(
-  wmo  = gsub(".*argo_(.*)_interp\\.csv", "\\1", basename(shared_files)),
-  path = shared_files
+  wmo  = gsub(".*argo_(.*)_interp\\.csv", "\\1", basename(run_paths)),
+  path = run_paths
 )
 write_csv(manifest, manifest_path)
 message("Manifest -> ", manifest_path)

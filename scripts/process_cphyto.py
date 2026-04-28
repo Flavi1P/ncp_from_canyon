@@ -184,14 +184,24 @@ def process_float(sprof_path: Path, shared_cphyto_dir: Path) -> dict | None:
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────
-def main(sprof_dir: Path, shared_dir: Path, manifest_path: Path) -> None:
+def main(sprof_dir: Path, shared_dir: Path, manifest_path: Path,
+         download_manifest: Path | None = None) -> None:
     sprof_dir         = Path(sprof_dir)
     shared_cphyto_dir = Path(shared_dir) / "cphyto_profiles"
     shared_cphyto_dir.mkdir(parents=True, exist_ok=True)
     Path(manifest_path).parent.mkdir(parents=True, exist_ok=True)
 
-    files = sorted(sprof_dir.glob("*_Sprof.nc"))
-    print(f"Found {len(files)} Sprof files in {sprof_dir}")
+    # Restrict to this run's floats via the download manifest
+    if download_manifest is not None and Path(download_manifest).exists():
+        dl_df = pd.read_csv(download_manifest)
+        files = sorted(
+            sprof_dir / f"{wmo}_Sprof.nc"
+            for wmo in dl_df["wmo"].astype(str)
+            if (sprof_dir / f"{wmo}_Sprof.nc").exists()
+        )
+    else:
+        files = sorted(sprof_dir.glob("*_Sprof.nc"))
+    print(f"Found {len(files)} Sprof files for this run")
 
     rows = []
     for i, f in enumerate(files, 1):
@@ -216,15 +226,17 @@ def main(sprof_dir: Path, shared_dir: Path, manifest_path: Path) -> None:
 if __name__ == "__main__":
     if "snakemake" in globals():
         main(
-            sprof_dir     = Path(snakemake.params["sprof_dir"]),    # noqa: F821
-            shared_dir    = Path(snakemake.params["shared_dir"]),   # noqa: F821
-            manifest_path = Path(snakemake.output["manifest"]),     # noqa: F821
+            sprof_dir         = Path(snakemake.params["sprof_dir"]),   # noqa: F821
+            shared_dir        = Path(snakemake.params["shared_dir"]),  # noqa: F821
+            manifest_path     = Path(snakemake.output["manifest"]),    # noqa: F821
+            download_manifest = Path(snakemake.input["manifest"]),     # noqa: F821
         )
     else:
-        args       = sys.argv[1:]
-        sprof_dir  = Path(args[0]) if len(args) > 0 else Path("data/raw")
-        shared_dir = Path(args[1]) if len(args) > 1 else Path("data/shared")
-        manifest   = Path(args[2]) if len(args) > 2 else Path(
+        args              = sys.argv[1:]
+        sprof_dir         = Path(args[0]) if len(args) > 0 else Path("data/raw")
+        shared_dir        = Path(args[1]) if len(args) > 1 else Path("data/shared")
+        manifest          = Path(args[2]) if len(args) > 2 else Path(
             "data/NorthAtlantic_seas_comparison/intermediate/cphyto_profiles/cphyto_manifest.csv"
         )
-        main(sprof_dir, shared_dir, manifest)
+        download_manifest = Path(args[3]) if len(args) > 3 else None
+        main(sprof_dir, shared_dir, manifest, download_manifest)
