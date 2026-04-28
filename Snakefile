@@ -6,6 +6,7 @@ OUT    = f"{config['output_dir']}/{RUN}"
 RAW    = config.get("raw_dir", "data/raw")
 SHARED = config.get("shared_dir", "data/shared")
 BASINS = list(config["basins"].keys())
+FLOATS = [str(w) for w in config.get("floats", [])]
 
 # ── Output targets ─────────────────────────────────────────────────────────────
 _ncp_csv  = f"{OUT}/ncp/{{basin}}/ncp_results.csv"
@@ -23,6 +24,17 @@ if config.get("uncertainty", False):
         expand(_unc_png, basin=BASINS) +
         [f"{OUT}/ncp/basins_comparison.png"]
     )
+if FLOATS:
+    _float_ncp_csv      = f"{OUT}/ncp_float/{{wmo}}/ncp_float.csv"
+    _float_ncp_png      = f"{OUT}/ncp_float/{{wmo}}/ncp_float.png"
+    _float_transect_png = f"{OUT}/ncp_float/{{wmo}}/nitrate_transect.png"
+    _all_outputs += (
+        expand(_float_ncp_csv,      wmo=FLOATS) +
+        expand(_float_ncp_png,      wmo=FLOATS) +
+        expand(_float_transect_png, wmo=FLOATS) +
+        [f"{OUT}/ncp_float/floats_comparison.png"]
+    )
+
 if config.get("compute_npp", False):
     _npp_ts_csv  = f"{OUT}/npp/{{basin}}/npp_timeseries.csv"
     _npp_ts_png  = f"{OUT}/npp/{{basin}}/npp_vs_ncp.png"
@@ -193,3 +205,32 @@ if config.get("uncertainty", False):
             fig = f"{OUT}/ncp/basins_comparison.png"
         script:
             "scripts/compare_basins.R"
+
+# ── Per-float NCP rules ────────────────────────────────────────────────────────
+if FLOATS:
+    rule compute_ncp_float:
+        input:
+            merged_csv = f"{DATA}/intermediate/merged/merged_ncp.csv"
+        params:
+            wmo               = lambda wc: wc.wmo,
+            zeu_default       = config.get("zeu_default", 40),
+            float_time_window = config.get("float_time_window", None)
+        output:
+            results_csv  = f"{OUT}/ncp_float/{{wmo}}/ncp_float.csv",
+            plot_png     = f"{OUT}/ncp_float/{{wmo}}/ncp_float.png",
+            transect_png = f"{OUT}/ncp_float/{{wmo}}/nitrate_transect.png"
+        threads: workflow.cores
+        wildcard_constraints:
+            wmo = "|".join(FLOATS)
+        script:
+            "scripts/compute_ncp_float.R"
+
+    rule compare_floats:
+        input:
+            float_csvs = expand(f"{OUT}/ncp_float/{{wmo}}/ncp_float.csv", wmo=FLOATS)
+        params:
+            wmo_list = FLOATS
+        output:
+            fig = f"{OUT}/ncp_float/floats_comparison.png"
+        script:
+            "scripts/compare_floats_ncp.R"

@@ -22,8 +22,9 @@ def download_sprof_files(
     lat_max:      float,
     sprof_dir:    Path,
     manifest_dir: Path,
-    date_start = None,
-    date_end   = None,
+    date_start  = None,
+    date_end    = None,
+    extra_wmos  = None,   # explicit WMOs to fetch regardless of region
 ) -> None:
     """Download Sprof .nc files to a shared sprof_dir, write per-run
     manifest and wmo_list to manifest_dir."""
@@ -53,8 +54,31 @@ def download_sprof_files(
         verbose            = True,
     )
 
-    print(f"\nFound {len(wmoids)} floats: {list(wmoids)}")
+    print(f"\nFound {len(wmoids)} floats in region: {list(wmoids)}")
     print(f"Downloaded {len(downloaded_filenames)} Sprof files.")
+
+    # Download explicitly listed floats that weren't captured by the regional search
+    if extra_wmos:
+        extra_wmos_int = [int(w) for w in extra_wmos]
+        already_fetched = set(int(w) for w in wmoids)
+        missing = [w for w in extra_wmos_int if w not in already_fetched]
+        if missing:
+            print(f"\nDownloading {len(missing)} explicitly listed float(s) outside region: {missing}")
+            # Reuse the already-downloaded GDAC index (overwrite_index=False)
+            extra_wmoids, _, _ = argo_gdac(
+                save_to            = str(sprof_dir) + "/",
+                floats             = missing,
+                sensors            = "DOXY",
+                overwrite_index    = False,
+                overwrite_profiles = False,
+                verbose            = True,
+            )
+            not_found = set(missing) - set(int(w) for w in extra_wmoids)
+            if not_found:
+                print(f"WARNING: {list(not_found)} not found in GDAC index with DOXY sensor — skipping")
+            wmoids = sorted(set(list(wmoids) + list(extra_wmoids)))
+        else:
+            print(f"\nAll explicitly listed floats already covered by regional search.")
 
     # Save WMO list and manifest to the per-run directory
     wmo_path = manifest_dir / "wmo_list.txt"
@@ -105,6 +129,7 @@ if __name__ == "__main__":
             manifest_dir = Path(cfg["data_dir"]) / cfg["run_name"] / "raw",
             date_start   = cfg.get("date_start"),
             date_end     = cfg.get("date_end"),
+            extra_wmos   = cfg.get("floats", []),
         )
 
     if "snakemake" in globals():
@@ -120,6 +145,7 @@ if __name__ == "__main__":
             manifest_dir = Path(snakemake.output.manifest).parent,
             date_start   = snakemake.config.get("date_start"),
             date_end     = snakemake.config.get("date_end"),
+            extra_wmos   = snakemake.config.get("floats", []),
         )
     else:
         # Running from CLI

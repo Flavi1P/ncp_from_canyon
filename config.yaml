@@ -1,4 +1,4 @@
-run_name:   "NorthAtlantic_seas_comparison"
+run_name:   "Single_float_test"
 data_dir:   "data"
 raw_dir:    "data/raw"
 shared_dir: "data/shared"
@@ -16,51 +16,51 @@ basins:
       - [-12, 63]
       - [-23, 55.7]
       - [-32, 57.4]
-  IrmingerSea:
-    polygon:
-      - [-36.5, 57]
-      - [-26, 63]
-      - [-32.7, 65.2]
-      - [-42.8, 59.29]
-      - [-36.5, 57]
-  LabradorSea:
-    polygon:
-      - [-50.5, 53.8]
-      - [-44.5, 58.5]
-      - [-52.8, 62.5]
-      - [-60.4, 60.4]
-      - [-50.5, 53.8]
+  # IrmingerSea:
+  #   polygon:
+  #     - [-36.5, 57]
+  #     - [-26, 63]
+  #     - [-32.7, 65.2]
+  #     - [-42.8, 59.29]
+  #     - [-36.5, 57]
+  # LabradorSea:
+  #   polygon:
+  #     - [-50.5, 53.8]
+  #     - [-44.5, 58.5]
+  #     - [-52.8, 62.5]
+  #     - [-60.4, 60.4]
+  #     - [-50.5, 53.8]
   
-  NorwegianSea:
-    polygon:
-      - [3, 62]
-      - [8.5, 70]
-      - [-8.2, 70]
-      - [-11, 60.4]
-      - [3, 62]
+  # NorwegianSea:
+  #   polygon:
+  #     - [3, 62]
+  #     - [8.5, 70]
+  #     - [-8.2, 70]
+  #     - [-11, 60.4]
+  #     - [3, 62]
   
-  NorthAtlantic:
-    polygon:
-      - [-45, 55]
-      - [-48, 43]
-      - [-13, 43]
-      - [-14, 55]
-      - [-45, 55]
+  # NorthAtlantic:
+  #   polygon:
+  #     - [-45, 55]
+  #     - [-48, 43]
+  #     - [-13, 43]
+  #     - [-14, 55]
+  #     - [-45, 55]
   
-  WesternMediterranean:
-    polygon:
-      - [-1.5, 36]
-      - [15, 38]
-      - [10.5, 44.4]
-      - [-2, 42]
-      - [-1.5, 36]
+  # WesternMediterranean:
+  #   polygon:
+  #     - [-1.5, 36]
+  #     - [15, 38]
+  #     - [10.5, 44.4]
+  #     - [-2, 42]
+  #     - [-1.5, 36]
 
 # Temporal extent
-date_start: "2015-01-01"
+date_start: "2023-01-01"
 date_end:   "2026-01-01"
 
 # NCP parameters
-ncp_time_steps: ["15 days", "20 days", "30 days"]
+ncp_time_steps: ["10 days", "20 days", "30 days"]
 zeu_default:    40
 
 # Uncertainty estimation
@@ -68,6 +68,24 @@ uncertainty: true
 n_mc:        100
 
 ncp_method: "o2_budget"
+
+# Single-float NCP mode — list WMOs to process individually.
+# Each float is processed without spatial filtering.
+# Omit or leave empty to skip.
+floats:
+   - 3902681
+   - 5903743
+   - 1900722
+
+# Time window for single-float NCP binning.
+# Profiles within each window are averaged (MLD, nitrate) before NCP is computed.
+# Set to null (or omit) to use consecutive-profile mode (one NCP per profile pair).
+float_time_window: "15 days"
+
+# MLD method for NCP integration depth
+# "average":    always use bin-mean MLD
+# "winter_max": use bin-max MLD when mean MLD > 100 m, bin-mean otherwise
+mld_method: "winter_max"
 
 # NPP estimation (CbPM). Set to false to skip all NPP-related steps (PAR
 # download, match, compute_npp, NPP plots). NCP pipeline is unaffected.
